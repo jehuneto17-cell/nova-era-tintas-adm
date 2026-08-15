@@ -82,14 +82,20 @@ export default function ConferenciaPage() {
     }
     setProcessando(true);
     try {
+      const agora = new Date().toISOString();
       await updateDoc(doc(db, "pedidos", selecionado.id), {
         estado: "aguardando_pagamento",
         comprovanteUrl: null,
         comprovanteEnviadoEm: null,
         valorComprovante: null,
+        ultimaRecusa: {
+          motivo: observacao,
+          quando: agora,
+          ...(selecionado.comprovanteUrl ? { comprovanteUrl: selecionado.comprovanteUrl } : {}),
+        },
         historico: [
           ...selecionado.historico,
-          { estado: "aguardando_pagamento", quando: new Date().toISOString(), quem: "por você", observacao: `Comprovante recusado: ${observacao}` },
+          { estado: "aguardando_pagamento", quando: agora, quem: "por você", observacao: `Comprovante recusado: ${observacao}` },
         ],
       });
       showToast(`${selecionado.numero} recusado`);

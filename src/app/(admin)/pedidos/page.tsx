@@ -14,7 +14,13 @@ import { useToast } from "@/components/ui/Toast";
 import { drawerContent, staggerContainer, staggerItem } from "@/lib/animations";
 import { formatBRL, cn } from "@/lib/utils";
 import { usePedidos } from "@/lib/hooks/usePedidos";
-import type { Pedido, PedidoEstado } from "@/lib/types";
+import { useProdutos } from "@/lib/hooks/useProdutos";
+import type { Pedido, PedidoEstado, PedidoItem, Produto } from "@/lib/types";
+
+function itensIguais(a: PedidoItem[], b: PedidoItem[]) {
+  if (a.length !== b.length) return false;
+  return a.every((it, i) => it.produtoId === b[i].produtoId && it.variacao === b[i].variacao && it.qtd === b[i].qtd && it.preco === b[i].preco);
+}
 
 const ETAPAS: { id: PedidoEstado; rotulo: string; cor: string; suaVez: boolean }[] = [
   { id: "em_negociacao", rotulo: "Negociação", cor: "#B54708", suaVez: true },
@@ -64,6 +70,9 @@ export default function PedidosPage() {
   const [obsAvancar, setObsAvancar] = useState("");
   const [linkCopiado, setLinkCopiado] = useState(false);
   const [processando, setProcessando] = useState(false);
+  const [itensEditados, setItensEditados] = useState<PedidoItem[] | null>(null);
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+  const [adicionarItemAberto, setAdicionarItemAberto] = useState(false);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -74,6 +83,13 @@ export default function PedidosPage() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [dialogo, selId]);
+
+  const [selIdCarregado, setSelIdCarregado] = useState<string | null>(null);
+  if (selId !== selIdCarregado) {
+    setSelIdCarregado(selId);
+    const pedido = selId ? pedidos.find((p) => p.id === selId) : undefined;
+    setItensEditados(pedido ? pedido.itens.map((it) => ({ ...it })) : null);
+  }
 
   const ativos = pedidos.filter((p) => p.estado !== "expirado");
   const expirados = pedidos.filter((p) => p.estado === "expirado");
@@ -112,6 +128,33 @@ export default function PedidosPage() {
       showToast("Não deu para atualizar o pedido. Tente de novo.");
     } finally {
       setProcessando(false);
+    }
+  }
+
+  async function salvarEdicaoItens(id: string, novosItens: PedidoItem[]) {
+    const pedido = pedidos.find((p) => p.id === id);
+    if (!pedido) return;
+    setSalvandoEdicao(true);
+    try {
+      await updateDoc(doc(db, "pedidos", id), {
+        itens: novosItens,
+        historico: [
+          ...pedido.historico,
+          {
+            tipo: "edicao",
+            estado: pedido.estado,
+            quando: new Date().toISOString(),
+            quem: "por você",
+            observacao: "Itens do pedido revisados",
+            itensAnteriores: pedido.itens,
+          },
+        ],
+      });
+      showToast("Pedido atualizado");
+    } catch {
+      showToast("Não deu para salvar as alterações. Tente de novo.");
+    } finally {
+      setSalvandoEdicao(false);
     }
   }
 
@@ -279,8 +322,54 @@ export default function PedidosPage() {
                   showToast("Número copiado");
                 }}
               />
-              <PedidoDrawerBody pedido={selecionado} total={fmtTotal(selecionado)} />
+              <PedidoDrawerBody
+                pedido={selecionado}
+                total={
+                  itensEditados
+                    ? itensEditados.reduce((a, it) => a + it.preco * it.qtd, 0) + selecionado.frete
+                    : fmtTotal(selecionado)
+                }
+                itensEditados={itensEditados}
+                onMudarQtd={(i, delta) => {
+                  setItensEditados((atual) => {
+                    if (!atual) return atual;
+                    const proximo = atual
+                      .map((it, idx) => (idx === i ? { ...it, qtd: it.qtd + delta } : it))
+                      .filter((it) => it.qtd > 0);
+                    return proximo;
+                  });
+                }}
+                onAdicionarItem={() => setAdicionarItemAberto(true)}
+              />
               <div className="flex flex-col gap-3 border-t border-border p-6">
+                {selecionado.estado === "em_negociacao" &&
+                  itensEditados &&
+                  !itensIguais(itensEditados, selecionado.itens) && (
+                    <div className="flex flex-col gap-2">
+                      {itensEditados.length === 0 && (
+                        <div className="text-center text-[13px] text-danger">
+                          O pedido precisa ter pelo menos 1 item para salvar.
+                        </div>
+                      )}
+                      <div className="flex gap-2.5">
+                        <Button
+                          variant="secondary"
+                          className="flex-1"
+                          onClick={() => setItensEditados(selecionado.itens.map((it) => ({ ...it })))}
+                        >
+                          Descartar
+                        </Button>
+                        <Button
+                          className="flex-1"
+                          loading={salvandoEdicao}
+                          disabled={itensEditados.length === 0}
+                          onClick={() => salvarEdicaoItens(selecionado.id, itensEditados)}
+                        >
+                          Salvar alterações
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 {selecionado.estado === "em_negociacao" && (
                   <Button onClick={() => setDialogo("fechar")}>Fechar pedido</Button>
                 )}
@@ -456,6 +545,22 @@ export default function PedidosPage() {
           </Button>
         </div>
       </Modal>
+
+      <AdicionarItemModal
+        open={adicionarItemAberto}
+        onClose={() => setAdicionarItemAberto(false)}
+        onAdicionar={(item) => {
+          setItensEditados((atual) => {
+            const base = atual ?? [];
+            const idx = base.findIndex((it) => it.produtoId === item.produtoId && it.variacao === item.variacao);
+            if (idx >= 0) {
+              return base.map((it, i) => (i === idx ? { ...it, qtd: it.qtd + 1 } : it));
+            }
+            return [...base, item];
+          });
+          setAdicionarItemAberto(false);
+        }}
+      />
     </main>
   );
 }
@@ -508,9 +613,22 @@ function PedidoDrawerHeader({
   );
 }
 
-function PedidoDrawerBody({ pedido, total }: { pedido: Pedido; total: number }) {
-  const subtotal = pedido.itens.reduce((a, it) => a + it.preco * it.qtd, 0);
+function PedidoDrawerBody({
+  pedido,
+  total,
+  itensEditados,
+  onMudarQtd,
+  onAdicionarItem,
+}: {
+  pedido: Pedido;
+  total: number;
+  itensEditados: PedidoItem[] | null;
+  onMudarQtd: (index: number, delta: number) => void;
+  onAdicionarItem: () => void;
+}) {
   const editavel = pedido.estado === "em_negociacao";
+  const itens = editavel && itensEditados ? itensEditados : pedido.itens;
+  const subtotal = itens.reduce((a, it) => a + it.preco * it.qtd, 0);
 
   return (
     <div className="flex-1 overflow-y-auto p-6">
@@ -527,8 +645,8 @@ function PedidoDrawerBody({ pedido, total }: { pedido: Pedido; total: number }) 
         <div>
           <div className="mb-3 text-[11px] font-medium uppercase tracking-wider text-ink-soft">Itens</div>
           <motion.div variants={staggerContainer(0.05)} initial="hidden" animate="visible" className="flex flex-col gap-3">
-            {pedido.itens.map((it, i) => (
-              <motion.div key={i} variants={staggerItem} className="flex items-center gap-3">
+            {itens.map((it, i) => (
+              <motion.div key={`${it.produtoId}-${it.variacao}`} variants={staggerItem} className="flex items-center gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-medium">{it.nome}</div>
                   <div className="mt-0.5 text-[13px] text-ink-soft">{it.variacao}</div>
@@ -536,9 +654,9 @@ function PedidoDrawerBody({ pedido, total }: { pedido: Pedido; total: number }) 
                 {editavel ? (
                   <div className="flex items-center gap-2">
                     <div className="flex items-center overflow-hidden rounded-lg border border-border">
-                      <button type="button" className="h-8 w-7.5 cursor-pointer border-0 bg-white text-ink-soft">−</button>
+                      <button type="button" onClick={() => onMudarQtd(i, -1)} className="h-8 w-7.5 cursor-pointer border-0 bg-white text-ink-soft">−</button>
                       <span className="min-w-6.5 text-center font-mono text-sm">{it.qtd}</span>
-                      <button type="button" className="h-8 w-7.5 cursor-pointer border-0 bg-white text-ink-soft">+</button>
+                      <button type="button" onClick={() => onMudarQtd(i, 1)} className="h-8 w-7.5 cursor-pointer border-0 bg-white text-ink-soft">+</button>
                     </div>
                     <span className="w-21 text-right font-mono text-[13px]">{formatBRL(it.preco)}</span>
                   </div>
@@ -552,7 +670,7 @@ function PedidoDrawerBody({ pedido, total }: { pedido: Pedido; total: number }) 
             ))}
           </motion.div>
           {editavel && (
-            <button type="button" className="mt-3.5 cursor-pointer border-0 bg-transparent p-0 font-sans text-sm font-medium text-primary">
+            <button type="button" onClick={onAdicionarItem} className="mt-3.5 cursor-pointer border-0 bg-transparent p-0 font-sans text-sm font-medium text-primary">
               + Adicionar item
             </button>
           )}
@@ -590,7 +708,8 @@ function PedidoDrawerBody({ pedido, total }: { pedido: Pedido; total: number }) 
             <span className="absolute bottom-1 left-1.5 top-1 w-px bg-border" />
             <div className="flex flex-col gap-4.5">
               {pedido.historico.map((h, i) => {
-                const info = ESTADO_INFO[h.estado] ?? { rotulo: h.estado, cor: "#667085" };
+                const ehEdicao = h.tipo === "edicao";
+                const info = ehEdicao ? { rotulo: "Itens revisados", cor: "#7A5AF8" } : ESTADO_INFO[h.estado] ?? { rotulo: h.estado, cor: "#667085" };
                 const atual = i === pedido.historico.length - 1;
                 return (
                   <motion.div key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }} className="relative">
@@ -601,6 +720,15 @@ function PedidoDrawerBody({ pedido, total }: { pedido: Pedido; total: number }) 
                     <div className="text-sm" style={{ fontWeight: atual ? 600 : 400 }}>{info.rotulo}</div>
                     <div className="mt-0.5 text-xs text-ink-soft">{fmtDataHora(h.quando)} · {h.quem}</div>
                     {h.observacao && <div className="mt-1 text-[13px] italic text-ink-soft">{h.observacao}</div>}
+                    {ehEdicao && h.itensAnteriores && (
+                      <div className="mt-1.5 flex flex-col gap-0.5 text-[12px] text-ink-soft">
+                        {h.itensAnteriores.map((it) => (
+                          <div key={`${it.produtoId}-${it.variacao}`} className="font-mono">
+                            {it.nome} ({it.variacao}): {it.qtd}× era {formatBRL(it.preco)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </motion.div>
                 );
               })}
@@ -609,5 +737,106 @@ function PedidoDrawerBody({ pedido, total }: { pedido: Pedido; total: number }) 
         </div>
       </div>
     </div>
+  );
+}
+
+function AdicionarItemModal({
+  open,
+  onClose,
+  onAdicionar,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onAdicionar: (item: PedidoItem) => void;
+}) {
+  const { produtos, loading } = useProdutos();
+  const [busca, setBusca] = useState("");
+  const [produtoSel, setProdutoSel] = useState<Produto | null>(null);
+  const [openCarregado, setOpenCarregado] = useState(open);
+  if (open !== openCarregado) {
+    setOpenCarregado(open);
+    if (!open) {
+      setBusca("");
+      setProdutoSel(null);
+    }
+  }
+
+  const q = busca.trim().toLowerCase();
+  const encontrados = q ? produtos.filter((p) => p.ativo && p.nome.toLowerCase().includes(q)) : produtos.filter((p) => p.ativo);
+
+  return (
+    <Modal open={open} onClose={onClose} maxWidth={440}>
+      <ModalTitle>Adicionar item ao pedido</ModalTitle>
+      {!produtoSel ? (
+        <>
+          <Input
+            autoFocus
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar produto"
+            className="mt-4"
+          />
+          <div className="mt-3 max-h-80 overflow-y-auto">
+            {loading && <div className="py-4 text-center text-sm text-ink-soft">Carregando produtos...</div>}
+            {!loading && encontrados.length === 0 && (
+              <div className="py-4 text-center text-sm text-ink-soft">Nenhum produto encontrado.</div>
+            )}
+            {encontrados.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setProdutoSel(p)}
+                className="flex w-full cursor-pointer items-center justify-between border-0 border-b border-border bg-transparent px-1 py-3 text-left font-sans"
+              >
+                <span className="text-sm font-medium">{p.nome}</span>
+                <span className="text-xs text-ink-soft">{Object.keys(p.variacoes).length} variações</span>
+              </button>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={() => setProdutoSel(null)}
+            className="mt-4 cursor-pointer border-0 bg-transparent p-0 font-sans text-[13px] font-medium text-primary"
+          >
+            ← Escolher outro produto
+          </button>
+          <div className="mt-3 text-sm font-medium">{produtoSel.nome}</div>
+          <div className="mt-3 flex max-h-80 flex-col gap-2 overflow-y-auto">
+            {Object.entries(produtoSel.variacoes)
+              .filter(([, v]) => v.ativo && v.estoque > 0)
+              .map(([chave, v]) => (
+                <button
+                  key={chave}
+                  type="button"
+                  onClick={() =>
+                    onAdicionar({
+                      produtoId: produtoSel.id,
+                      nome: produtoSel.nome,
+                      variacao: `${v.cor} · ${v.volume}`,
+                      qtd: 1,
+                      preco: v.preco,
+                    })
+                  }
+                  className="flex cursor-pointer items-center justify-between rounded-lg border border-border bg-transparent px-3.5 py-2.5 text-left font-sans hover:border-primary"
+                >
+                  <span className="text-sm">{v.cor} · {v.volume}</span>
+                  <span className="font-mono text-[13px]">{formatBRL(v.preco)}</span>
+                </button>
+              ))}
+            {Object.values(produtoSel.variacoes).filter((v) => v.ativo && v.estoque > 0).length === 0 && (
+              <div className="py-3 text-center text-sm text-ink-soft">Sem variações disponíveis em estoque.</div>
+            )}
+          </div>
+        </>
+      )}
+      <div className="mt-5 flex justify-end">
+        <Button variant="ghost" onClick={onClose}>
+          Cancelar
+        </Button>
+      </div>
+    </Modal>
   );
 }
