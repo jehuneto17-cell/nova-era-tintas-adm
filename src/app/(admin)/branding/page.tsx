@@ -68,7 +68,7 @@ export default function BrandingPage() {
   const [contatoEd, setContatoEd] = useState(false);
   const [contato, setContato] = useState({
     email: "",
-    telefone: "",
+    whatsapp: "",
     instagram: "",
     facebook: "",
   });
@@ -93,7 +93,7 @@ export default function BrandingPage() {
           const redes = (data.redes_sociais as Record<string, string> | undefined) ?? {};
           const c = {
             email: (data.email as string) ?? "",
-            telefone: (data.telefone as string) ?? "",
+            whatsapp: (data.whatsapp as string) ?? (data.telefone as string) ?? "",
             instagram: redes.instagram ?? "",
             facebook: redes.facebook ?? "",
           };
@@ -135,7 +135,7 @@ export default function BrandingPage() {
     };
   }, [picker, dialogo]);
 
-  async function salvarBranding(msg: string, extra?: { email?: string; telefone?: string; instagram?: string; facebook?: string }) {
+  async function salvarBranding(msg: string, extra?: { email?: string; whatsapp?: string; instagram?: string; facebook?: string }) {
     setSalvando(true);
     try {
       const c = extra ?? contato;
@@ -149,7 +149,7 @@ export default function BrandingPage() {
           nome,
           cor_primaria: primaria,
           cor_secundaria: secundaria,
-          telefone: c.telefone,
+          whatsapp: c.whatsapp,
           email: c.email,
           redes_sociais: {
             instagram: c.instagram,
@@ -427,7 +427,7 @@ export default function BrandingPage() {
             {!contatoEd ? (
               <div className="mt-5 grid grid-cols-1 gap-4.5 sm:grid-cols-2">
                 <ContatoField label="E-mail" value={contato.email} />
-                <ContatoField label="Telefone" value={contato.telefone} mono />
+                <ContatoField label="WhatsApp" value={contato.whatsapp} mono />
                 <ContatoField label="Instagram" value={contato.instagram} />
                 <ContatoField label="Facebook" value={contato.facebook} />
               </div>
@@ -438,8 +438,8 @@ export default function BrandingPage() {
                   <Input id="ct-email" value={contato.email} onChange={(e) => setContato((c) => ({ ...c, email: e.target.value }))} />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  <label htmlFor="ct-tel" className="text-[13px] font-medium">Telefone</label>
-                  <Input id="ct-tel" value={contato.telefone} onChange={(e) => setContato((c) => ({ ...c, telefone: e.target.value }))} className="font-mono" />
+                  <label htmlFor="ct-tel" className="text-[13px] font-medium">WhatsApp</label>
+                  <Input id="ct-tel" value={contato.whatsapp} onChange={(e) => setContato((c) => ({ ...c, whatsapp: e.target.value }))} className="font-mono" />
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="ct-ig" className="text-[13px] font-medium">Instagram</label>
@@ -591,7 +591,7 @@ export default function BrandingPage() {
                     logo_url: alvo === "logo" ? null : logoUrl,
                     banner_url_web: alvo === "banner-web" ? null : bannerUrlWeb,
                     banner_url_mobile: alvo === "banner-mobile" ? null : bannerUrlMobile,
-                    telefone: contato.telefone,
+                    whatsapp: contato.whatsapp,
                     email: contato.email,
                     redes_sociais: { instagram: contato.instagram, facebook: contato.facebook, tiktok: "" },
                     atualizado_em: serverTimestamp(),
