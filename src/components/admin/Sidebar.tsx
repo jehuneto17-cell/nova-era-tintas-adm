@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
 import { LayoutGrid, ClipboardList, BadgeCheck, User, Settings, Palette, LogOut } from "lucide-react";
@@ -32,8 +33,8 @@ export function Sidebar({ pendentesConferencia = 0 }: { pendentesConferencia?: n
   return (
     <aside className="sticky top-0 flex h-screen w-55 shrink-0 flex-col bg-sidebar p-3">
       <div className="flex items-center gap-2.5 px-2 pb-6">
-        <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-primary text-[13px] font-bold text-white">
-          NET
+        <div className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-[10px] bg-primary">
+          <Image src="/logo-nova-era-tintas.png" alt="Nova Era Tintas" width={36} height={36} className="h-full w-full object-cover" />
         </div>
       </div>
       <nav className="flex flex-col gap-0.5">

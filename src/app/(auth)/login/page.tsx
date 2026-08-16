@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Eye, EyeOff, AlertCircle, CheckCircle2 } from "lucide-react";
@@ -96,8 +97,8 @@ export default function LoginPage() {
           onSubmit={onSubmit}
           className="flex w-full max-w-90 flex-col"
         >
-          <div className="mb-10 flex h-11 w-11 items-center justify-center rounded-[10px] bg-primary text-[15px] font-bold tracking-wide text-white">
-            NET
+          <div className="mb-10 flex h-11 w-11 items-center justify-center overflow-hidden rounded-[10px] bg-primary">
+            <Image src="/logo-nova-era-tintas.png" alt="Nova Era Tintas" width={44} height={44} className="h-full w-full object-cover" />
           </div>
           <h1 className="m-0 text-[28px] font-semibold tracking-tight text-ink">Abrir a loja</h1>
           <p className="mb-8 mt-2 text-[15px] text-ink-soft text-pretty">
