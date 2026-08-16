@@ -51,6 +51,11 @@ interface CupomForm {
   fim: string;
   limite: string;
 }
+interface HorarioDia {
+  aberto: boolean;
+  inicio: string;
+  fim: string;
+}
 interface LojaState {
   nome: string;
   cnpj: string;
@@ -58,6 +63,7 @@ interface LojaState {
   cidade: string;
   estado: string;
   horarios: string;
+  horariosSemana: HorarioDia[];
 }
 
 const SECOES = [
@@ -82,7 +88,31 @@ const EXEMPLO: Record<string, string> = {
 const PIX_DEFAULT: PixState = { tipo: "CNPJ", chave: "", recebedor: "", instrucoes: "", prazo: "24", qrCodeUrl: null };
 const WA_DEFAULT: WaState = { numero: "", mensagem: "" };
 const FRETE_DEFAULT: FreteState = { valor: "0,00", gratis: "0,00" };
-const LOJA_DEFAULT: LojaState = { nome: "", cnpj: "", endereco: "", cidade: "", estado: "", horarios: "" };
+const DIAS_SEMANA = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
+const DIAS_ABREV = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+const HORARIOS_SEMANA_DEFAULT: HorarioDia[] = DIAS_SEMANA.map((_, i) => ({
+  aberto: i < 5,
+  inicio: "08:00",
+  fim: i < 5 ? "18:00" : "13:00",
+}));
+const LOJA_DEFAULT: LojaState = { nome: "", cnpj: "", endereco: "", cidade: "", estado: "", horarios: "", horariosSemana: HORARIOS_SEMANA_DEFAULT };
+
+function resumoHorarios(dias: HorarioDia[]): string {
+  const grupos: { label: string; inicio: string; fim: string; aberto: boolean }[] = [];
+  dias.forEach((d, i) => {
+    const ultimo = grupos[grupos.length - 1];
+    if (ultimo && ultimo.aberto === d.aberto && ultimo.inicio === d.inicio && ultimo.fim === d.fim) {
+      ultimo.label = ultimo.label.includes("-")
+        ? `${ultimo.label.split("-")[0]}-${DIAS_ABREV[i]}`
+        : `${ultimo.label}-${DIAS_ABREV[i]}`;
+    } else {
+      grupos.push({ label: DIAS_ABREV[i], inicio: d.inicio, fim: d.fim, aberto: d.aberto });
+    }
+  });
+  return grupos
+    .map((g) => (g.aberto ? `${g.label} ${g.inicio}-${g.fim}` : `${g.label} fechado`))
+    .join(", ");
+}
 
 function fmtDataBr(iso: string) {
   if (!iso) return "—";
@@ -197,6 +227,9 @@ export default function ConfiguracoesPage() {
             cidade: lojaData.cidade ?? "",
             estado: lojaData.estado ?? "",
             horarios: lojaData.horarios ?? "",
+            horariosSemana: Array.isArray(lojaData.horarios_semana) && lojaData.horarios_semana.length === 7
+              ? lojaData.horarios_semana
+              : HORARIOS_SEMANA_DEFAULT,
           });
         }
 
@@ -302,7 +335,12 @@ export default function ConfiguracoesPage() {
   async function salvarLoja() {
     setSalvandoLoja(true);
     try {
-      await setDoc(doc(db, "configuracoes", "loja"), { ...loja, atualizado_em: serverTimestamp() }, { merge: true });
+      const { horariosSemana, ...resto } = loja;
+      await setDoc(
+        doc(db, "configuracoes", "loja"),
+        { ...resto, horarios: resumoHorarios(horariosSemana), horarios_semana: horariosSemana, atualizado_em: serverTimestamp() },
+        { merge: true }
+      );
       setLojaEditing(false);
       showToast("Loja salva");
     } catch {
@@ -1017,7 +1055,7 @@ export default function ConfiguracoesPage() {
                   <Field label="Cidade" value={loja.cidade} />
                   <Field label="Estado" value={loja.estado} />
                   <div className="sm:col-span-2">
-                    <Field label="Horário de funcionamento" value={loja.horarios} />
+                    <Field label="Horário de funcionamento" value={resumoHorarios(loja.horariosSemana)} />
                   </div>
                 </div>
               ) : (
@@ -1042,9 +1080,60 @@ export default function ConfiguracoesPage() {
                     <label htmlFor="lj-uf" className="text-[13px] font-medium">Estado</label>
                     <Input id="lj-uf" value={loja.estado} onChange={(e) => setLoja((l) => ({ ...l, estado: e.target.value }))} />
                   </div>
-                  <div className="flex flex-col gap-1.5 sm:col-span-2">
-                    <label htmlFor="lj-hor" className="text-[13px] font-medium">Horário de funcionamento</label>
-                    <Input id="lj-hor" value={loja.horarios} onChange={(e) => setLoja((l) => ({ ...l, horarios: e.target.value }))} />
+                  <div className="flex flex-col gap-2 sm:col-span-2">
+                    <label className="text-[13px] font-medium">Horário de funcionamento</label>
+                    <div className="flex flex-col gap-2 rounded-2xl border border-black/5 p-3.5">
+                      {DIAS_SEMANA.map((dia, i) => {
+                        const h = loja.horariosSemana[i];
+                        return (
+                          <div key={dia} className="flex flex-wrap items-center gap-3">
+                            <span className="w-22 shrink-0 text-[13px] font-medium">{dia}</span>
+                            {h.aberto ? (
+                              <>
+                                <Input
+                                  type="time"
+                                  value={h.inicio}
+                                  onChange={(e) =>
+                                    setLoja((l) => ({
+                                      ...l,
+                                      horariosSemana: l.horariosSemana.map((d, idx) => (idx === i ? { ...d, inicio: e.target.value } : d)),
+                                    }))
+                                  }
+                                  className="h-9 w-28"
+                                />
+                                <span className="text-[13px] text-black/40">às</span>
+                                <Input
+                                  type="time"
+                                  value={h.fim}
+                                  onChange={(e) =>
+                                    setLoja((l) => ({
+                                      ...l,
+                                      horariosSemana: l.horariosSemana.map((d, idx) => (idx === i ? { ...d, fim: e.target.value } : d)),
+                                    }))
+                                  }
+                                  className="h-9 w-28"
+                                />
+                              </>
+                            ) : (
+                              <span className="text-[13px] text-black/40">Fechado</span>
+                            )}
+                            <label className="ml-auto flex items-center gap-1.5 text-[13px] text-black/60">
+                              <input
+                                type="checkbox"
+                                checked={!h.aberto}
+                                onChange={(e) =>
+                                  setLoja((l) => ({
+                                    ...l,
+                                    horariosSemana: l.horariosSemana.map((d, idx) => (idx === i ? { ...d, aberto: !e.target.checked } : d)),
+                                  }))
+                                }
+                              />
+                              Fechado
+                            </label>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
               )}
