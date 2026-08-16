@@ -127,7 +127,8 @@ export interface Cupom {
 export interface BrandingConfig {
   logoUrl?: string;
   logoFormato: "quadrada" | "larga" | "vazia";
-  bannerUrl?: string;
+  bannerUrlWeb?: string;
+  bannerUrlMobile?: string;
   bannerAtivo: boolean;
   bannerTitulo: string;
   bannerAltura: "baixa" | "media" | "alta";

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Copy, GripVertical, Loader2, X } from "lucide-react";
+import { Copy, GripVertical, Loader2, Upload, X } from "lucide-react";
 import {
   addDoc,
   collection,
@@ -23,6 +23,8 @@ import { AnimatedSection } from "@/components/ui/Accordion";
 import { SettingsCard } from "@/components/admin/SettingsCard";
 import { useToast } from "@/components/ui/Toast";
 import { staggerContainer, staggerItem, cardHover } from "@/lib/animations";
+import { useCloudinaryUpload } from "@/lib/hooks/useCloudinaryUpload";
+import { ACCEPTED_IMAGE_TYPES } from "@/lib/cloudinary";
 import type { Cupom } from "@/lib/types";
 
 interface PixState {
@@ -31,6 +33,7 @@ interface PixState {
   recebedor: string;
   instrucoes: string;
   prazo: string;
+  qrCodeUrl: string | null;
 }
 interface WaState {
   numero: string;
@@ -76,7 +79,7 @@ const EXEMPLO: Record<string, string> = {
   "{link}": "novaeratintas.com/p/1043",
 };
 
-const PIX_DEFAULT: PixState = { tipo: "CNPJ", chave: "", recebedor: "", instrucoes: "", prazo: "24" };
+const PIX_DEFAULT: PixState = { tipo: "CNPJ", chave: "", recebedor: "", instrucoes: "", prazo: "24", qrCodeUrl: null };
 const WA_DEFAULT: WaState = { numero: "", mensagem: "" };
 const FRETE_DEFAULT: FreteState = { valor: "0,00", gratis: "0,00" };
 const LOJA_DEFAULT: LojaState = { nome: "", cnpj: "", endereco: "", cidade: "", estado: "", horarios: "" };
@@ -105,6 +108,11 @@ export default function ConfiguracoesPage() {
   const [pixSnapshot, setPixSnapshot] = useState<PixState | null>(null);
   const [confirmandoChave, setConfirmandoChave] = useState(false);
   const [salvandoPix, setSalvandoPix] = useState(false);
+  const qrInputRef = useRef<HTMLInputElement>(null);
+  const { upload: uploadQrCode, uploading: enviandoQrCode } = useCloudinaryUpload({
+    folder: "nova-era-tintas/pix",
+    onError: (message) => showToast(message),
+  });
 
   const [wa, setWa] = useState<WaState>(WA_DEFAULT);
   const [waEditing, setWaEditing] = useState(false);
@@ -158,6 +166,7 @@ export default function ConfiguracoesPage() {
             recebedor: pagamento.pix_recebedor ?? "",
             instrucoes: pagamento.pix_instrucoes ?? "",
             prazo: pagamento.pix_prazo_horas != null ? String(pagamento.pix_prazo_horas) : PIX_DEFAULT.prazo,
+            qrCodeUrl: pagamento.pix_qr_url ?? null,
           });
           setMotivos(Array.isArray(pagamento.motivos_recusa) ? pagamento.motivos_recusa : []);
         }
@@ -203,6 +212,7 @@ export default function ConfiguracoesPage() {
   }, []);
 
   useEffect(() => {
+    if (carregando) return;
     const alvos = SECOES.map((s) => s.id);
     const observer = new IntersectionObserver(
       (entries) => {
@@ -217,8 +227,18 @@ export default function ConfiguracoesPage() {
       const el = document.getElementById(id);
       if (el) observer.observe(el);
     });
-    return () => observer.disconnect();
-  }, []);
+
+    function onScroll() {
+      const scrolledToEnd = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+      if (scrolledToEnd) setSecaoAtiva(alvos[alvos.length - 1]);
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("scroll", onScroll);
+    };
+  }, [carregando]);
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -238,6 +258,7 @@ export default function ConfiguracoesPage() {
         pix_recebedor: pix.recebedor,
         pix_instrucoes: pix.instrucoes,
         pix_prazo_horas: Number(pix.prazo) || 0,
+        pix_qr_url: pix.qrCodeUrl,
       });
       setPixEditing(false);
       showToast("PIX salvo");
@@ -385,13 +406,19 @@ export default function ConfiguracoesPage() {
               <a
                 key={s.id}
                 href={`#${s.id}`}
-                className="py-1.5 pl-3 text-sm no-underline transition-colors duration-150"
+                className="relative py-1.5 pl-3 text-sm no-underline transition-colors duration-150"
                 style={{
-                  borderLeft: `2px solid ${secaoAtiva === s.id ? "#12B76A" : "transparent"}`,
                   color: secaoAtiva === s.id ? "#101828" : "#667085",
                   fontWeight: secaoAtiva === s.id ? 600 : 400,
                 }}
               >
+                {secaoAtiva === s.id && (
+                  <motion.span
+                    layoutId="indice-barra"
+                    transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                    className="absolute inset-y-0 left-0 w-0.5 bg-primary"
+                  />
+                )}
                 {s.nome}
               </a>
             ))}
@@ -417,6 +444,15 @@ export default function ConfiguracoesPage() {
                       <Field label="Tipo de chave" value={pix.tipo} />
                       <Field label="Chave PIX" value={pix.chave} mono size="lg" />
                       <Field label="Nome do recebedor" value={pix.recebedor} />
+                      <div>
+                        <div className="text-[13px] text-ink-soft">QR Code</div>
+                        {pix.qrCodeUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={pix.qrCodeUrl} alt="QR Code do PIX" className="mt-1.5 h-24 w-24 rounded-md border border-border object-contain p-1" />
+                        ) : (
+                          <div className="mt-0.5 text-[15px] text-ink-soft">Não enviado</div>
+                        )}
+                      </div>
                       <Field label="Prazo para enviar o comprovante" value={<><span className="font-mono">{pix.prazo}</span> horas</>} />
                     </div>
                   ) : (
@@ -457,6 +493,56 @@ export default function ConfiguracoesPage() {
                         <span className="text-xs text-ink-soft">O cliente confere este nome no app do banco antes de pagar.</span>
                       </div>
                       <div className="flex flex-col gap-1.5">
+                        <span className="text-[13px] font-medium">QR Code</span>
+                        <div className="flex items-center gap-3.5">
+                          <div className="flex h-30 w-30 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-dashed border-border p-2 text-center">
+                            {pix.qrCodeUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={pix.qrCodeUrl} alt="QR Code do PIX" className="h-full w-full object-contain" />
+                            ) : (
+                              <div className="flex flex-col items-center gap-1.5 text-ink-soft">
+                                <Upload size={18} strokeWidth={1.7} />
+                                <span className="text-xs text-pretty">Envie a imagem do QR Code</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex flex-col items-start gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              className="h-9"
+                              loading={enviandoQrCode}
+                              onClick={() => qrInputRef.current?.click()}
+                            >
+                              {pix.qrCodeUrl ? "Trocar QR Code" : "Enviar QR Code"}
+                            </Button>
+                            <input
+                              ref={qrInputRef}
+                              type="file"
+                              accept={ACCEPTED_IMAGE_TYPES.join(",")}
+                              hidden
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                e.target.value = "";
+                                if (!file) return;
+                                const result = await uploadQrCode(file);
+                                if (result) setPix((p) => ({ ...p, qrCodeUrl: result.url }));
+                              }}
+                            />
+                            {pix.qrCodeUrl && (
+                              <button
+                                type="button"
+                                onClick={() => setPix((p) => ({ ...p, qrCodeUrl: null }))}
+                                className="cursor-pointer border-0 bg-transparent p-0 font-sans text-[13px] font-medium text-danger"
+                              >
+                                Remover
+                              </button>
+                            )}
+                            <span className="text-xs text-ink-soft">PNG ou JPG.</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
                         <label htmlFor="pix-inst" className="text-[13px] font-medium">Instruções para o cliente</label>
                         <Textarea id="pix-inst" rows={3} value={pix.instrucoes} onChange={(e) => setPix((p) => ({ ...p, instrucoes: e.target.value }))} />
                       </div>
@@ -477,7 +563,12 @@ export default function ConfiguracoesPage() {
                   <div className="flex w-60 max-w-full flex-col items-center gap-3 rounded-[20px] border-8 border-ink bg-white px-3.5 py-4.5" style={{ aspectRatio: "9 / 19" }}>
                     <div className="text-[15px] font-semibold">Pague com PIX</div>
                     <div className="flex h-27 w-27 shrink-0 items-center justify-center rounded-md border border-border bg-[#F2F2F0] text-[11px] text-ink-soft">
-                      Sem QR Code
+                      {pix.qrCodeUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={pix.qrCodeUrl} alt="QR Code do PIX" className="h-full w-full rounded-md object-contain p-1" />
+                      ) : (
+                        "Sem QR Code"
+                      )}
                     </div>
                     <div className="break-all text-center font-mono text-xs">{pix.chave}</div>
                     <div className="rounded-md border border-border px-3 py-1.5 text-xs font-medium">Copiar chave</div>

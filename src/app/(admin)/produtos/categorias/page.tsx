@@ -16,6 +16,18 @@ import {
   Grid3x3,
   Tag,
   Palette,
+  Brush,
+  SprayCan,
+  Hammer,
+  Ruler,
+  Building2,
+  DoorOpen,
+  Fence,
+  TreePine,
+  Car,
+  Warehouse,
+  ShowerHead,
+  Lightbulb,
   GripVertical,
   Loader2,
   type LucideIcon,
@@ -36,17 +48,57 @@ import type { Categoria } from "@/lib/types";
 const ICONES: Record<string, LucideIcon> = {
   roller: PaintRoller,
   brush: Paintbrush,
+  brush2: Brush,
+  spray: SprayCan,
   droplet: Droplet,
+  palette: Palette,
   layers: Layers,
   wrench: Wrench,
+  hammer: Hammer,
+  ruler: Ruler,
   home: Home,
+  building: Building2,
+  door: DoorOpen,
+  fence: Fence,
+  tree: TreePine,
+  car: Car,
+  warehouse: Warehouse,
+  shower: ShowerHead,
+  lightbulb: Lightbulb,
   sparkles: Sparkles,
   sun: Sun,
   package: Package,
   grid: Grid3x3,
   tag: Tag,
-  palette: Palette,
 };
+
+const ICONE_NOMES: Record<string, string> = {
+  roller: "Rolo",
+  brush: "Pincel",
+  brush2: "Pincel fino",
+  spray: "Spray",
+  droplet: "Gota",
+  palette: "Paleta",
+  layers: "Camadas",
+  wrench: "Ferramenta",
+  hammer: "Martelo",
+  ruler: "Régua",
+  home: "Casa",
+  building: "Prédio",
+  door: "Porta",
+  fence: "Cerca",
+  tree: "Jardim",
+  car: "Garagem",
+  warehouse: "Galpão",
+  shower: "Banheiro",
+  lightbulb: "Iluminação",
+  sparkles: "Brilho",
+  sun: "Sol",
+  package: "Pacote",
+  grid: "Grade",
+  tag: "Etiqueta",
+};
+
 const ICONE_IDS = Object.keys(ICONES);
 
 export default function CategoriasPage() {
@@ -283,7 +335,7 @@ export default function CategoriasPage() {
                               animate={{ opacity: 1, y: 0, scale: 1 }}
                               exit={{ opacity: 0, y: -4, scale: 0.97 }}
                               transition={{ duration: 0.14 }}
-                              className="absolute left-0 top-10 z-10 grid grid-cols-6 gap-1.5 rounded-[10px] border border-border bg-white p-2.5 shadow-[0_12px_28px_rgba(16,24,40,0.16)]"
+                              className="absolute left-0 top-10 z-10 grid max-h-80 w-72 grid-cols-4 gap-2.5 overflow-y-auto rounded-[10px] border border-border bg-white p-3.5 shadow-[0_12px_28px_rgba(16,24,40,0.16)]"
                             >
                               {ICONE_IDS.map((id, i) => {
                                 const OptIcon = ICONES[id];
@@ -294,21 +346,22 @@ export default function CategoriasPage() {
                                     type="button"
                                     initial={{ opacity: 0, scale: 0.8 }}
                                     animate={{ opacity: 1, scale: 1 }}
-                                    transition={{ delay: i * 0.02 }}
+                                    transition={{ delay: i * 0.015 }}
                                     whileHover={{ scale: 1.12 }}
                                     onClick={() => {
                                       atualizar(c.id, { icone: id });
                                       setIconePicker(null);
                                     }}
-                                    aria-label={id}
-                                    className="flex h-8.5 w-8.5 cursor-pointer items-center justify-center rounded-lg border"
+                                    aria-label={ICONE_NOMES[id] ?? id}
+                                    title={ICONE_NOMES[id] ?? id}
+                                    className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-lg border"
                                     style={{
                                       borderColor: selected ? "#12B76A" : "#E4E7EC",
                                       background: selected ? "#F6FEF9" : "#fff",
                                       color: selected ? "#12B76A" : "#344054",
                                     }}
                                   >
-                                    <OptIcon size={18} strokeWidth={1.8} />
+                                    <OptIcon size={22} strokeWidth={1.8} />
                                   </motion.button>
                                 );
                               })}

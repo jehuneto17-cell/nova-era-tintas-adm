@@ -342,8 +342,13 @@ export default function ProdutosPage() {
                       }}
                       className="grid min-h-15 cursor-pointer grid-cols-[64px_minmax(220px,2.4fr)_minmax(110px,1fr)_80px_minmax(160px,1.4fr)_100px_64px] items-center gap-3 border-b border-border px-5 transition-colors hover:bg-black/[0.02]"
                     >
-                      <div className="flex h-10 w-10 items-center justify-center rounded-md border border-border bg-paper">
-                        <span className="h-3.5 w-3.5 rounded-[3px]" style={{ background: swatch }} />
+                      <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border border-border bg-paper">
+                        {p.fotos[0] ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={p.fotos[0].url} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          <span className="h-3.5 w-3.5 rounded-[3px]" style={{ background: swatch }} />
+                        )}
                       </div>
                       <div className="text-sm font-medium">{p.nome}</div>
                       <div className="text-sm text-ink-soft">{p.categoria}</div>

@@ -2,13 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, ImageOff, Check } from "lucide-react";
-import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { AlertTriangle, ImageOff, Check, Loader2 } from "lucide-react";
+import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Modal, ModalTitle, ModalBody } from "@/components/ui/Modal";
-import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
 import { isValidHexColor, cn } from "@/lib/utils";
 import { useCloudinaryUpload } from "@/lib/hooks/useCloudinaryUpload";
@@ -22,11 +21,6 @@ const PALETA = [
 ];
 
 type LogoFormato = "quadrada" | "larga" | "vazia";
-const ALTURAS = [
-  { id: "baixa", nome: "Baixa" },
-  { id: "media", nome: "Média" },
-  { id: "alta", nome: "Alta" },
-] as const;
 
 function luminancia(hex: string) {
   const h = hex.replace("#", "");
@@ -44,40 +38,82 @@ function razaoBranco(hex: string) {
 
 export default function BrandingPage() {
   const { showToast } = useToast();
-  const [atualizado, setAtualizado] = useState("06/08 às 14:32");
+  const [carregando, setCarregando] = useState(true);
+  const [atualizado, setAtualizado] = useState("—");
 
-  const [logo, setLogo] = useState<LogoFormato>("quadrada");
+  const [logo, setLogo] = useState<LogoFormato>("vazia");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [banner, setBanner] = useState(true);
-  const [bannerUrl, setBannerUrl] = useState<string | null>(null);
+  const [bannerUrlWeb, setBannerUrlWeb] = useState<string | null>(null);
+  const [bannerUrlMobile, setBannerUrlMobile] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
-  const bannerInputRef = useRef<HTMLInputElement>(null);
+  const bannerWebInputRef = useRef<HTMLInputElement>(null);
+  const bannerMobileInputRef = useRef<HTMLInputElement>(null);
   const { upload: uploadLogo, uploading: enviandoLogo } = useCloudinaryUpload({
     folder: "nova-era-tintas/branding",
     onError: (message) => showToast(message),
   });
-  const { upload: uploadBanner, uploading: enviandoBanner } = useCloudinaryUpload({
+  const { upload: uploadBannerWeb, uploading: enviandoBannerWeb } = useCloudinaryUpload({
     folder: "nova-era-tintas/branding",
     onError: (message) => showToast(message),
   });
-  const [bannerTitulo, setBannerTitulo] = useState("Semana da Tinta");
-  const [bannerAltura, setBannerAltura] = useState<(typeof ALTURAS)[number]["id"]>("media");
-  const [bannerOverlay, setBannerOverlay] = useState(true);
+  const { upload: uploadBannerMobile, uploading: enviandoBannerMobile } = useCloudinaryUpload({
+    folder: "nova-era-tintas/branding",
+    onError: (message) => showToast(message),
+  });
   const [nome, setNome] = useState("Nova Era Tintas");
   const [primaria, setPrimaria] = useState("#00B20B");
   const [secundaria, setSecundaria] = useState("#0088B7");
   const [picker, setPicker] = useState<null | "primaria" | "secundaria">(null);
-  const [dialogo, setDialogo] = useState<null | "logo" | "banner">(null);
+  const [dialogo, setDialogo] = useState<null | "logo" | "banner-web" | "banner-mobile">(null);
   const [contatoEd, setContatoEd] = useState(false);
   const [contato, setContato] = useState({
-    email: "contato@novaeratintas.com.br",
-    telefone: "(35) 3521-1234",
-    instagram: "@novaeratintas",
-    facebook: "novaeratintasitau",
+    email: "",
+    telefone: "",
+    instagram: "",
+    facebook: "",
   });
   const [contatoSnap, setContatoSnap] = useState(contato);
   const [primariaValid, setPrimariaValid] = useState(true);
   const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    async function carregar() {
+      try {
+        const snap = await getDoc(doc(db, "configuracoes", "branding"));
+        const data = snap.data() as Record<string, unknown> | undefined;
+        if (data) {
+          const logoFmt = data.logo_formato as LogoFormato | undefined;
+          setLogo(logoFmt ?? (data.logo_url ? "quadrada" : "vazia"));
+          setLogoUrl((data.logo_url as string) ?? null);
+          setBannerUrlWeb((data.banner_url_web as string) ?? null);
+          setBannerUrlMobile((data.banner_url_mobile as string) ?? null);
+          setNome((data.nome as string) ?? "Nova Era Tintas");
+          setPrimaria((data.cor_primaria as string) ?? "#00B20B");
+          setSecundaria((data.cor_secundaria as string) ?? "#0088B7");
+          const redes = (data.redes_sociais as Record<string, string> | undefined) ?? {};
+          const c = {
+            email: (data.email as string) ?? "",
+            telefone: (data.telefone as string) ?? "",
+            instagram: redes.instagram ?? "",
+            facebook: redes.facebook ?? "",
+          };
+          setContato(c);
+          setContatoSnap(c);
+          const ts = data.atualizado_em as { toDate?: () => Date } | undefined;
+          if (ts?.toDate) {
+            const d = ts.toDate();
+            setAtualizado(`${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")} às ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`);
+          }
+        }
+      } catch {
+        showToast("Não deu para carregar o branding.");
+      } finally {
+        setCarregando(false);
+      }
+    }
+    carregar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -107,8 +143,12 @@ export default function BrandingPage() {
         doc(db, "configuracoes", "branding"),
         {
           logo_url: logoUrl,
-          banner_url: bannerUrl,
-          descricao: bannerTitulo,
+          logo_formato: logo,
+          banner_url_web: bannerUrlWeb,
+          banner_url_mobile: bannerUrlMobile,
+          nome,
+          cor_primaria: primaria,
+          cor_secundaria: secundaria,
           telefone: c.telefone,
           email: c.email,
           redes_sociais: {
@@ -134,7 +174,18 @@ export default function BrandingPage() {
   const razao = razaoBranco(primaria);
   const contrasteRuim = razao < 4.5;
 
-  const bannerAlturaPx = bannerAltura === "baixa" ? 88 : bannerAltura === "alta" ? 168 : 124;
+
+  if (carregando) {
+    return (
+      <main className="min-w-0 flex-1 p-10">
+        <h1 className="m-0 text-[30px] font-semibold tracking-tight">Branding</h1>
+        <p className="mt-1.5 text-[15px] text-ink-soft">A cara da loja no app do cliente.</p>
+        <div className="mt-14 flex justify-center">
+          <Loader2 size={22} className="animate-spin text-primary" />
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-w-0 flex-1 p-10">
@@ -233,89 +284,39 @@ export default function BrandingPage() {
           {/* Banner */}
           <section className="rounded-xl border border-border bg-white p-6">
             <div className="text-[17px] font-semibold">Banner da Home</div>
-            <div className="mt-1 text-[13px] text-ink-soft">A faixa grande no topo da Home. Boa pra promoção.</div>
-            <motion.div
-              className="relative mt-4 flex w-full items-center justify-center overflow-hidden rounded-[10px] border border-border bg-paper"
-              animate={{ height: bannerAlturaPx }}
-              transition={{ duration: 0.22 }}
-            >
-              {banner && bannerUrl && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={bannerUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
-              )}
-              {banner && !bannerUrl && <div className="absolute inset-0" style={{ background: "repeating-linear-gradient(45deg, #D0D5DD 0 8px, #E4E7EC 8px 16px)" }} />}
-              {bannerOverlay && banner && <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, rgba(16,24,40,0.62), rgba(16,24,40,0.05))" }} />}
-              {banner ? (
-                <div
-                  className="absolute left-5.5 top-1/2 -translate-y-1/2 text-lg font-bold text-white"
-                  style={{ textShadow: bannerOverlay ? "none" : "0 1px 3px rgba(0,0,0,0.5)" }}
-                >
-                  {bannerTitulo}
-                </div>
-              ) : (
-                <span className="relative text-[13px] text-ink-soft">Envie o banner da Home</span>
-              )}
-            </motion.div>
-            <div className="mt-3.5 flex items-center gap-4">
-              <Button variant="outline" className="h-9.5" loading={enviandoBanner} onClick={() => bannerInputRef.current?.click()}>
-                Trocar imagem
-              </Button>
-              <input
-                ref={bannerInputRef}
-                type="file"
-                accept={ACCEPTED_IMAGE_TYPES.join(",")}
-                hidden
-                onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  e.target.value = "";
-                  if (!file) return;
-                  const result = await uploadBanner(file);
-                  if (result) {
-                    setBannerUrl(result.url);
-                    setBanner(true);
-                  }
+            <div className="mt-1 text-[13px] text-ink-soft">A faixa grande no topo da Home. Cada versão do app usa a sua própria imagem.</div>
+
+            <div className="mt-4.5 grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <BannerUploader
+                label="Banner do site (web)"
+                hint="Faixa larga, estilo paisagem. O ideal é 1600×320px (proporção ~5:1)."
+                url={bannerUrlWeb}
+                aspectRatio="5 / 1"
+                uploading={enviandoBannerWeb}
+                onTrocar={() => bannerWebInputRef.current?.click()}
+                onRemover={() => setDialogo("banner-web")}
+                inputRef={bannerWebInputRef}
+                onFile={async (file) => {
+                  const result = await uploadBannerWeb(file);
+                  if (result) setBannerUrlWeb(result.url);
                 }}
               />
-              {banner && bannerUrl && (
-                <button type="button" onClick={() => setDialogo("banner")} className="cursor-pointer border-0 bg-transparent p-0 font-sans text-[13px] font-medium text-danger">
-                  Remover
-                </button>
-              )}
+              <BannerUploader
+                label="Banner do app (mobile)"
+                hint="Formato mais vertical, tela do celular é estreita. O ideal é 780×580px."
+                url={bannerUrlMobile}
+                aspectRatio="780 / 580"
+                uploading={enviandoBannerMobile}
+                onTrocar={() => bannerMobileInputRef.current?.click()}
+                onRemover={() => setDialogo("banner-mobile")}
+                inputRef={bannerMobileInputRef}
+                onFile={async (file) => {
+                  const result = await uploadBannerMobile(file);
+                  if (result) setBannerUrlMobile(result.url);
+                }}
+              />
             </div>
-            <div className="mt-4.5 flex flex-col gap-1.5">
-              <label htmlFor="bn-tit" className="text-[13px] font-medium">Texto sobre o banner</label>
-              <Input id="bn-tit" value={bannerTitulo} onChange={(e) => setBannerTitulo(e.target.value)} placeholder="Semana da Tinta" />
-            </div>
-            <div className="mt-4.5 grid grid-cols-1 gap-5 sm:grid-cols-2">
-              <div>
-                <div className="mb-2 text-[13px] font-medium">Altura</div>
-                <div className="inline-flex overflow-hidden rounded-lg border border-border">
-                  {ALTURAS.map((a, i) => (
-                    <button
-                      key={a.id}
-                      type="button"
-                      onClick={() => setBannerAltura(a.id)}
-                      className="cursor-pointer px-3.5 py-2 font-sans text-[13px] font-medium transition-colors"
-                      style={{
-                        background: bannerAltura === a.id ? "#12B76A" : "#fff",
-                        color: bannerAltura === a.id ? "#fff" : "#667085",
-                        borderLeft: i === 0 ? "0" : "1px solid #E4E7EC",
-                      }}
-                    >
-                      {a.nome}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <label className="flex cursor-pointer items-center justify-between gap-2.5">
-                <span>
-                  <span className="block text-[13px] font-medium">Escurecer o fundo</span>
-                  <span className="text-xs text-ink-soft">Deixa o texto legível sobre qualquer foto.</span>
-                </span>
-                <Switch checked={bannerOverlay} onChange={() => setBannerOverlay((v) => !v)} aria-label="Escurecer fundo do banner" />
-              </label>
-            </div>
-            <div className="mt-3.5 text-xs text-ink-soft">JPG, PNG ou WEBP, até 10MB. O ideal é 1200×300px.</div>
+            <div className="mt-3.5 text-xs text-ink-soft">JPG, PNG ou WEBP, até 10MB.</div>
             <div className="mt-4.5 flex justify-end">
               <Button className="h-10" loading={salvando} onClick={() => salvarBranding("Banner atualizado")}>
                 Salvar
@@ -489,7 +490,7 @@ export default function BrandingPage() {
                 )}
                 <span className="overflow-hidden text-ellipsis whitespace-nowrap text-[7px] font-semibold">{nome}</span>
               </div>
-              {banner && <div className="m-1.5 h-6.5 shrink-0 rounded" style={{ background: "repeating-linear-gradient(45deg, #D0D5DD 0 5px, #E4E7EC 5px 10px)" }} />}
+              {!!bannerUrlMobile && <div className="m-1.5 h-6.5 shrink-0 rounded" style={{ background: "repeating-linear-gradient(45deg, #D0D5DD 0 5px, #E4E7EC 5px 10px)" }} />}
               <div className="grid grid-cols-2 gap-1.25 px-1.5">
                 {[0, 1, 2, 3].map((i) => (
                   <div key={i} className="h-7.5 rounded bg-paper" />
@@ -562,9 +563,15 @@ export default function BrandingPage() {
       </div>
 
       <Modal open={!!dialogo} onClose={() => setDialogo(null)} maxWidth={420}>
-        <ModalTitle>{dialogo === "banner" ? "Remover o banner?" : "Remover a logo?"}</ModalTitle>
+        <ModalTitle>
+          {dialogo === "logo" ? "Remover a logo?" : dialogo === "banner-web" ? "Remover o banner do site?" : "Remover o banner do app?"}
+        </ModalTitle>
         <ModalBody>
-          {dialogo === "banner" ? "A Home fica sem a faixa de promoção no topo." : "O app volta a mostrar só o nome da loja."}
+          {dialogo === "logo"
+            ? "O app volta a mostrar só o nome da loja."
+            : dialogo === "banner-web"
+              ? "O site fica sem a faixa de promoção no topo."
+              : "O app mobile fica sem a faixa de promoção no topo."}
         </ModalBody>
         <div className="mt-5.5 flex justify-end gap-3">
           <Button variant="secondary" onClick={() => setDialogo(null)}>
@@ -582,8 +589,8 @@ export default function BrandingPage() {
                   doc(db, "configuracoes", "branding"),
                   {
                     logo_url: alvo === "logo" ? null : logoUrl,
-                    banner_url: alvo === "banner" ? null : bannerUrl,
-                    descricao: bannerTitulo,
+                    banner_url_web: alvo === "banner-web" ? null : bannerUrlWeb,
+                    banner_url_mobile: alvo === "banner-mobile" ? null : bannerUrlMobile,
                     telefone: contato.telefone,
                     email: contato.email,
                     redes_sociais: { instagram: contato.instagram, facebook: contato.facebook, tiktok: "" },
@@ -591,14 +598,15 @@ export default function BrandingPage() {
                   },
                   { merge: true }
                 );
-                if (alvo === "banner") {
-                  setBanner(false);
-                  setBannerUrl(null);
+                if (alvo === "banner-web") {
+                  setBannerUrlWeb(null);
+                } else if (alvo === "banner-mobile") {
+                  setBannerUrlMobile(null);
                 } else {
                   setLogo("vazia");
                   setLogoUrl(null);
                 }
-                showToast(alvo === "banner" ? "Banner removido" : "Logo removida");
+                showToast(alvo === "logo" ? "Logo removida" : "Banner removido");
                 setAtualizado("agora");
               } catch {
                 showToast("Não deu para remover. Tente de novo.");
@@ -685,6 +693,70 @@ function ColorField({
             </motion.div>
           )}
         </AnimatePresence>
+      </div>
+      <div className="mt-2 text-xs text-ink-soft">{hint}</div>
+    </div>
+  );
+}
+
+function BannerUploader({
+  label,
+  hint,
+  url,
+  aspectRatio,
+  uploading,
+  onTrocar,
+  onRemover,
+  inputRef,
+  onFile,
+}: {
+  label: string;
+  hint: string;
+  url: string | null;
+  aspectRatio: string;
+  uploading: boolean;
+  onTrocar: () => void;
+  onRemover: () => void;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+  onFile: (file: File) => void;
+}) {
+  return (
+    <div>
+      <div className="mb-2 text-[13px] font-medium">{label}</div>
+      <div
+        className="relative flex w-full items-center justify-center overflow-hidden rounded-[10px] border border-border bg-paper"
+        style={{ aspectRatio }}
+      >
+        {url ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+        ) : (
+          <>
+            <div className="absolute inset-0" style={{ background: "repeating-linear-gradient(45deg, #D0D5DD 0 8px, #E4E7EC 8px 16px)" }} />
+            <span className="relative text-[13px] text-ink-soft">Sem imagem</span>
+          </>
+        )}
+      </div>
+      <div className="mt-3 flex items-center gap-3.5">
+        <Button variant="outline" className="h-8.5" loading={uploading} onClick={onTrocar}>
+          {url ? "Trocar" : "Enviar"}
+        </Button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept={ACCEPTED_IMAGE_TYPES.join(",")}
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.target.value = "";
+            if (file) onFile(file);
+          }}
+        />
+        {url && (
+          <button type="button" onClick={onRemover} className="cursor-pointer border-0 bg-transparent p-0 font-sans text-[13px] font-medium text-danger">
+            Remover
+          </button>
+        )}
       </div>
       <div className="mt-2 text-xs text-ink-soft">{hint}</div>
     </div>

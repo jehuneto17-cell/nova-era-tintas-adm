@@ -90,13 +90,15 @@ Não existe subcoleção de pedidos aqui — para saber pedidos/histórico de co
 ```ts
 {
   logo_url: string | null;
-  banner_url: string | null;
-  descricao: string;           // texto sobre o banner
+  banner_url_web: string | null;      // banner do app web — só o web lê este campo
+  banner_url_mobile: string | null;   // banner do app mobile — só o mobile lê este campo
+  descricao: string;           // texto sobre o banner, compartilhado pelos dois
   telefone: string;
   email: string;
   redes_sociais: { instagram: string; facebook: string; tiktok: string };
 }
 ```
+O painel admin permite subir uma imagem de banner diferente para cada app. Não existe mais um campo único `banner_url` — cada app deve ler apenas o campo do seu próprio canal (`_web` ou `_mobile`) e ignorar o outro.
 
 ### `configuracoes/pagamento` (documento único)
 ```ts
