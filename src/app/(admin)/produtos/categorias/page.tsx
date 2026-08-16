@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -111,6 +112,7 @@ export default function CategoriasPage() {
   const [removendo, setRemovendo] = useState<string | null>(null);
   const [excluindo, setExcluindo] = useState(false);
   const [iconePicker, setIconePicker] = useState<string | null>(null);
+  const [iconePickerPos, setIconePickerPos] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
   const [enviandoFotoId, setEnviandoFotoId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fotoAlvoRef = useRef<string | null>(null);
@@ -125,17 +127,9 @@ export default function CategoriasPage() {
       if (removendo) setRemovendo(null);
       else if (iconePicker) setIconePicker(null);
     }
-    function onPointerDown(e: PointerEvent) {
-      if (!iconePicker) return;
-      const target = e.target as HTMLElement;
-      if (target.closest("[aria-expanded]")) return;
-      setIconePicker(null);
-    }
     window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("pointerdown", onPointerDown);
     return () => {
       window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("pointerdown", onPointerDown);
     };
   }, [removendo, iconePicker]);
 
@@ -320,7 +314,20 @@ export default function CategoriasPage() {
                       <div className="relative">
                         <button
                           type="button"
-                          onClick={() => setIconePicker((cur) => (cur === c.id ? null : c.id))}
+                          onClick={(e) => {
+                            if (iconePicker === c.id) {
+                              setIconePicker(null);
+                              return;
+                            }
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const espacoAbaixo = window.innerHeight - rect.bottom;
+                            const paraCima = espacoAbaixo < 340;
+                            setIconePickerPos({
+                              left: rect.left,
+                              ...(paraCima ? { bottom: window.innerHeight - rect.top + 6 } : { top: rect.bottom + 6 }),
+                            });
+                            setIconePicker(c.id);
+                          }}
                           aria-expanded={iconePicker === c.id}
                           className="flex h-8.5 cursor-pointer items-center gap-2 rounded-lg border border-border bg-white px-3 font-sans text-[13px] text-[#344054]"
                         >
@@ -328,46 +335,6 @@ export default function CategoriasPage() {
                           Ícone
                           <span className="text-[10px] text-ink-soft">▾</span>
                         </button>
-                        <AnimatePresence>
-                          {iconePicker === c.id && (
-                            <motion.div
-                              initial={{ opacity: 0, y: -4, scale: 0.97 }}
-                              animate={{ opacity: 1, y: 0, scale: 1 }}
-                              exit={{ opacity: 0, y: -4, scale: 0.97 }}
-                              transition={{ duration: 0.14 }}
-                              className="absolute left-0 top-10 z-10 grid max-h-80 w-72 grid-cols-4 gap-2.5 overflow-y-auto rounded-[10px] border border-border bg-white p-3.5 shadow-[0_12px_28px_rgba(16,24,40,0.16)]"
-                            >
-                              {ICONE_IDS.map((id, i) => {
-                                const OptIcon = ICONES[id];
-                                const selected = id === c.icone;
-                                return (
-                                  <motion.button
-                                    key={id}
-                                    type="button"
-                                    initial={{ opacity: 0, scale: 0.8 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    transition={{ delay: i * 0.015 }}
-                                    whileHover={{ scale: 1.12 }}
-                                    onClick={() => {
-                                      atualizar(c.id, { icone: id });
-                                      setIconePicker(null);
-                                    }}
-                                    aria-label={ICONE_NOMES[id] ?? id}
-                                    title={ICONE_NOMES[id] ?? id}
-                                    className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-lg border"
-                                    style={{
-                                      borderColor: selected ? "#12B76A" : "#E4E7EC",
-                                      background: selected ? "#F6FEF9" : "#fff",
-                                      color: selected ? "#12B76A" : "#344054",
-                                    }}
-                                  >
-                                    <OptIcon size={22} strokeWidth={1.8} />
-                                  </motion.button>
-                                );
-                              })}
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
                       </div>
                       <span className="text-[13px] text-ink-soft">
                         <span className="font-mono text-ink">{c.qtdProdutos}</span> {c.qtdProdutos === 1 ? "produto" : "produtos"}
@@ -393,6 +360,60 @@ export default function CategoriasPage() {
               );
             })}
           </AnimatePresence>
+
+          {iconePicker &&
+            iconePickerPos &&
+            createPortal(
+              <AnimatePresence>
+                <div
+                  key="icone-picker-backdrop"
+                  onClick={() => setIconePicker(null)}
+                  onWheel={() => setIconePicker(null)}
+                  className="fixed inset-0 z-40"
+                />
+                <motion.div
+                  key="icone-picker-menu"
+                  initial={{ opacity: 0, y: iconePickerPos.bottom !== undefined ? 4 : -4, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: iconePickerPos.bottom !== undefined ? 4 : -4, scale: 0.97 }}
+                  transition={{ duration: 0.14 }}
+                  style={{ left: iconePickerPos.left, top: iconePickerPos.top, bottom: iconePickerPos.bottom }}
+                  data-icone-picker
+                  className="fixed z-50 grid max-h-80 w-72 grid-cols-4 gap-2.5 overflow-y-auto rounded-[10px] border border-border bg-white p-3.5 shadow-[0_12px_28px_rgba(16,24,40,0.16)]"
+                >
+                  {ICONE_IDS.map((id, i) => {
+                    const OptIcon = ICONES[id];
+                    const categoriaAtual = categorias.find((c) => c.id === iconePicker);
+                    const selected = id === categoriaAtual?.icone;
+                    return (
+                      <motion.button
+                        key={id}
+                        type="button"
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: i * 0.015 }}
+                        whileHover={{ scale: 1.12 }}
+                        onClick={() => {
+                          if (iconePicker) atualizar(iconePicker, { icone: id });
+                          setIconePicker(null);
+                        }}
+                        aria-label={ICONE_NOMES[id] ?? id}
+                        title={ICONE_NOMES[id] ?? id}
+                        className="flex h-12 w-12 cursor-pointer items-center justify-center rounded-lg border"
+                        style={{
+                          borderColor: selected ? "#12B76A" : "#E4E7EC",
+                          background: selected ? "#F6FEF9" : "#fff",
+                          color: selected ? "#12B76A" : "#344054",
+                        }}
+                      >
+                        <OptIcon size={22} strokeWidth={1.8} />
+                      </motion.button>
+                    );
+                  })}
+                </motion.div>
+              </AnimatePresence>,
+              document.body
+            )}
 
           <AnimatePresence>
             {nova && (
