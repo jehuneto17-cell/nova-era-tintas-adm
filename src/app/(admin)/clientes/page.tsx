@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { useToast } from "@/components/ui/Toast";
 import { drawerContent, staggerContainer, staggerItem } from "@/lib/animations";
-import { formatBRL, cn } from "@/lib/utils";
+import { formatBRL, cn, whatsappLink } from "@/lib/utils";
 import { useClientes } from "@/lib/hooks/useClientes";
 import { usePedidos } from "@/lib/hooks/usePedidos";
 import type { Cliente, EnderecoCliente, Pedido } from "@/lib/types";
@@ -53,6 +53,40 @@ function humano(dias: number) {
   return `há ${Math.round(dias / 30)} meses`;
 }
 
+interface EnderecoForm {
+  rotulo: string;
+  cep: string;
+  uf: string;
+  cidade: string;
+  bairro: string;
+  rua: string;
+  numero: string;
+  complemento: string;
+}
+
+const ENDERECO_VAZIO: EnderecoForm = { rotulo: "", cep: "", uf: "", cidade: "", bairro: "", rua: "", numero: "", complemento: "" };
+
+function enderecoParaTexto(e: EnderecoForm) {
+  const linha1 = [e.rua.trim(), e.numero.trim()].filter(Boolean).join(", ");
+  const parte1 = [linha1, e.complemento.trim()].filter(Boolean).join(" - ");
+  const parte2 = [e.bairro.trim(), [e.cidade.trim(), e.uf.trim()].filter(Boolean).join("/")].filter(Boolean).join(", ");
+  const cep = e.cep.trim() ? `CEP ${e.cep.trim()}` : "";
+  return [parte1, parte2, cep].filter(Boolean).join(" - ");
+}
+
+function enderecoDeCliente(e: EnderecoCliente): EnderecoForm {
+  return {
+    rotulo: e.rotulo,
+    cep: e.cep ?? "",
+    uf: e.uf ?? "",
+    cidade: e.cidade ?? "",
+    bairro: e.bairro ?? "",
+    rua: e.rua ?? "",
+    numero: e.numero ?? "",
+    complemento: e.complemento ?? "",
+  };
+}
+
 function pedidosDoCliente(pedidos: Pedido[], clienteId: string) {
   return pedidos
     .filter((p) => p.clienteId === clienteId)
@@ -88,7 +122,10 @@ export default function ClientesPage() {
   const [rascunho, setRascunho] = useState<{ nome: string; telefone: string; email: string } | null>(null);
   const [salvandoContato, setSalvandoContato] = useState(false);
   const [addEnd, setAddEnd] = useState(false);
-  const [novoEnd, setNovoEnd] = useState({ rotulo: "", texto: "" });
+  const [novoEnd, setNovoEnd] = useState<EnderecoForm>(ENDERECO_VAZIO);
+  const [editEndId, setEditEndId] = useState<string | null>(null);
+  const [editEndForm, setEditEndForm] = useState<EnderecoForm>(ENDERECO_VAZIO);
+  const [salvandoEnd, setSalvandoEnd] = useState(false);
   const [verLevou, setVerLevou] = useState(false);
   const [verPedidos, setVerPedidos] = useState(false);
   const [verHistorico, setVerHistorico] = useState(false);
@@ -97,6 +134,7 @@ export default function ClientesPage() {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
       if (addEnd) setAddEnd(false);
+      else if (editEndId !== null) setEditEndId(null);
       else if (selId !== null) {
         setSelId(null);
         setEditando(false);
@@ -104,7 +142,7 @@ export default function ClientesPage() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [addEnd, selId]);
+  }, [addEnd, editEndId, selId]);
 
   const q = busca.trim().toLowerCase();
   const qd = q.replace(/\D/g, "");
@@ -156,6 +194,7 @@ export default function ClientesPage() {
     setSelId(id);
     setEditando(false);
     setAddEnd(false);
+    setEditEndId(null);
     setVerLevou(false);
     setVerPedidos(false);
     setVerHistorico(false);
@@ -279,14 +318,15 @@ export default function ClientesPage() {
                     </button>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => showToast(`Abrindo WhatsApp com ${selecionado.nome}`)}
+                <a
+                  href={whatsappLink(selecionado.telefone, `Olá ${selecionado.nome.split(" ")[0]}, tudo bem? Aqui é da Nova Era Tintas.`)}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   className="mt-4.5 flex h-10.5 w-full cursor-pointer items-center justify-center gap-2 rounded-lg border-[1.5px] border-primary bg-transparent font-sans text-sm font-semibold text-primary transition-colors hover:bg-primary-tint"
                 >
                   <MessageCircle size={17} strokeWidth={1.8} />
                   Falar no WhatsApp
-                </button>
+                </a>
               </div>
 
               <div className="grid grid-cols-3 border-b border-border">
@@ -396,53 +436,112 @@ export default function ClientesPage() {
                 <div className="mb-3.5 flex items-center justify-between">
                   <div className="text-[11px] font-medium uppercase tracking-wider text-ink-soft">Endereços</div>
                   {!addEnd && (
-                    <button type="button" onClick={() => setAddEnd(true)} className="cursor-pointer border-0 bg-transparent p-0 font-sans text-[13px] font-medium text-primary">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditEndId(null);
+                        setAddEnd(true);
+                      }}
+                      className="cursor-pointer border-0 bg-transparent p-0 font-sans text-[13px] font-medium text-primary"
+                    >
                       + Adicionar
                     </button>
                   )}
                 </div>
 
                 <motion.div variants={staggerContainer(0.05)} initial="hidden" animate="visible" className="flex flex-col gap-2.5">
-                  {selecionado.enderecos.map((e) => (
-                    <motion.div key={e.id} variants={staggerItem} className="flex items-start gap-3 rounded-[10px] border p-3.5" style={{ borderColor: e.principal ? "#12B76A" : "#E4E7EC" }}>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          atualizarCliente(selecionado.id, {
-                            enderecos: selecionado.enderecos.map((x) => ({ ...x, principal: x.id === e.id })),
-                          }).then(() => showToast("Endereço principal atualizado"))
-                        }
-                        disabled={e.principal}
-                        aria-label={`Tornar ${e.rotulo} principal`}
-                        className={cn("mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full border-2 bg-transparent p-0", e.principal ? "cursor-default" : "cursor-pointer")}
-                        style={{ borderColor: e.principal ? "#12B76A" : "#D0D5DD" }}
-                      >
-                        {e.principal && <span className="h-2 w-2 rounded-full bg-primary" />}
-                      </button>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{e.rotulo}</span>
-                          {e.principal && (
-                            <span className="rounded-full border border-[#A6F4C5] bg-primary-tint px-2 py-0.25 text-[11px] font-medium text-primary">Principal</span>
-                          )}
-                        </div>
-                        <div className="mt-0.75 text-[13px] text-ink-soft text-pretty">{e.texto}</div>
-                        {!e.principal && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              atualizarCliente(selecionado.id, {
-                                enderecos: selecionado.enderecos.filter((x) => x.id !== e.id),
-                              }).then(() => showToast("Endereço removido"))
-                            }
-                            className="mt-2 cursor-pointer border-0 bg-transparent p-0 font-sans text-xs font-medium text-danger"
+                  {selecionado.enderecos.map((e) =>
+                    editEndId === e.id ? (
+                      <div key={e.id} className="rounded-[10px] border border-primary bg-primary-tint p-3.5">
+                        <EnderecoFormFields value={editEndForm} onChange={setEditEndForm} />
+                        <div className="mt-2.5 flex justify-end gap-3">
+                          <Button variant="ghost" className="h-9" onClick={() => setEditEndId(null)}>
+                            Cancelar
+                          </Button>
+                          <Button
+                            className="h-9"
+                            loading={salvandoEnd}
+                            onClick={async () => {
+                              if (!editEndForm.rotulo.trim()) return;
+                              setSalvandoEnd(true);
+                              const atualizado: EnderecoCliente = {
+                                ...e,
+                                rotulo: editEndForm.rotulo,
+                                texto: enderecoParaTexto(editEndForm),
+                                cep: editEndForm.cep,
+                                uf: editEndForm.uf,
+                                cidade: editEndForm.cidade,
+                                bairro: editEndForm.bairro,
+                                rua: editEndForm.rua,
+                                numero: editEndForm.numero,
+                                complemento: editEndForm.complemento,
+                              };
+                              await atualizarCliente(selecionado.id, {
+                                enderecos: selecionado.enderecos.map((x) => (x.id === e.id ? atualizado : x)),
+                              });
+                              setSalvandoEnd(false);
+                              setEditEndId(null);
+                              showToast("Endereço atualizado");
+                            }}
                           >
-                            Remover
-                          </button>
-                        )}
+                            Salvar
+                          </Button>
+                        </div>
                       </div>
-                    </motion.div>
-                  ))}
+                    ) : (
+                      <motion.div key={e.id} variants={staggerItem} className="flex items-start gap-3 rounded-[10px] border p-3.5" style={{ borderColor: e.principal ? "#12B76A" : "#E4E7EC" }}>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            atualizarCliente(selecionado.id, {
+                              enderecos: selecionado.enderecos.map((x) => ({ ...x, principal: x.id === e.id })),
+                            }).then(() => showToast("Endereço principal atualizado"))
+                          }
+                          disabled={e.principal}
+                          aria-label={`Tornar ${e.rotulo} principal`}
+                          className={cn("mt-0.5 flex h-4.5 w-4.5 shrink-0 items-center justify-center rounded-full border-2 bg-transparent p-0", e.principal ? "cursor-default" : "cursor-pointer")}
+                          style={{ borderColor: e.principal ? "#12B76A" : "#D0D5DD" }}
+                        >
+                          {e.principal && <span className="h-2 w-2 rounded-full bg-primary" />}
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">{e.rotulo}</span>
+                            {e.principal && (
+                              <span className="rounded-full border border-[#A6F4C5] bg-primary-tint px-2 py-0.25 text-[11px] font-medium text-primary">Principal</span>
+                            )}
+                          </div>
+                          <div className="mt-0.75 text-[13px] text-ink-soft text-pretty">{e.texto}</div>
+                          <div className="mt-2 flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditEndForm(enderecoDeCliente(e));
+                                setEditEndId(e.id);
+                                setAddEnd(false);
+                              }}
+                              className="cursor-pointer border-0 bg-transparent p-0 font-sans text-xs font-medium text-primary"
+                            >
+                              Editar
+                            </button>
+                            {!e.principal && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  atualizarCliente(selecionado.id, {
+                                    enderecos: selecionado.enderecos.filter((x) => x.id !== e.id),
+                                  }).then(() => showToast("Endereço removido"))
+                                }
+                                className="cursor-pointer border-0 bg-transparent p-0 font-sans text-xs font-medium text-danger"
+                              >
+                                Remover
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </motion.div>
+                    )
+                  )}
                 </motion.div>
 
                 <AnimatePresence>
@@ -453,28 +552,39 @@ export default function ClientesPage() {
                       exit={{ opacity: 0, height: 0 }}
                       className="mt-3 overflow-hidden rounded-[10px] border border-primary bg-primary-tint p-3.5"
                     >
-                      <div className="flex flex-col gap-2.5">
-                        <Input value={novoEnd.rotulo} onChange={(e) => setNovoEnd((n) => ({ ...n, rotulo: e.target.value }))} placeholder="Nome do endereço (Casa, Obra…)" className="h-9.5" />
-                        <Input value={novoEnd.texto} onChange={(e) => setNovoEnd((n) => ({ ...n, texto: e.target.value }))} placeholder="Rua, número, bairro, cidade, CEP" className="h-9.5" />
-                        <div className="flex justify-end gap-3">
-                          <Button variant="ghost" className="h-9" onClick={() => setAddEnd(false)}>
-                            Cancelar
-                          </Button>
-                          <Button
-                            className="h-9"
-                            onClick={async () => {
-                              if (!novoEnd.rotulo.trim() || !novoEnd.texto.trim()) return;
-                              const novo: EnderecoCliente = { id: `e${Date.now()}`, rotulo: novoEnd.rotulo, texto: novoEnd.texto, principal: false };
-                              await atualizarCliente(selecionado.id, { enderecos: [...selecionado.enderecos, novo] });
-                              setAddEnd(false);
-                              setNovoEnd({ rotulo: "", texto: "" });
-                              showToast("Endereço adicionado");
-                            }}
-                          >
-                            Adicionar
-                          </Button>
-                        </div>
-                      </div>
+                      <div className="mb-3 text-sm font-semibold">Novo endereço</div>
+                      <EnderecoFormFields value={novoEnd} onChange={setNovoEnd} />
+                      <Button
+                        className="mt-3 h-10 w-full"
+                        loading={salvandoEnd}
+                        onClick={async () => {
+                          if (!novoEnd.rotulo.trim()) return;
+                          setSalvandoEnd(true);
+                          const novo: EnderecoCliente = {
+                            id: `e${Date.now()}`,
+                            rotulo: novoEnd.rotulo,
+                            texto: enderecoParaTexto(novoEnd),
+                            principal: selecionado.enderecos.length === 0,
+                            cep: novoEnd.cep,
+                            uf: novoEnd.uf,
+                            cidade: novoEnd.cidade,
+                            bairro: novoEnd.bairro,
+                            rua: novoEnd.rua,
+                            numero: novoEnd.numero,
+                            complemento: novoEnd.complemento,
+                          };
+                          await atualizarCliente(selecionado.id, { enderecos: [...selecionado.enderecos, novo] });
+                          setSalvandoEnd(false);
+                          setAddEnd(false);
+                          setNovoEnd(ENDERECO_VAZIO);
+                          showToast("Endereço adicionado");
+                        }}
+                      >
+                        + Adicionar Endereço
+                      </Button>
+                      <button type="button" onClick={() => { setAddEnd(false); setNovoEnd(ENDERECO_VAZIO); }} className="mt-2.5 w-full cursor-pointer border-0 bg-transparent p-0 text-center font-sans text-[13px] font-medium text-ink-soft">
+                        Cancelar
+                      </button>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -559,6 +669,28 @@ function Stat({ label, value, bordered }: { label: string; value: string; border
     <div className={cn("p-4.5", bordered && "border-l border-border")}>
       <div className="text-[11px] font-medium uppercase tracking-wider text-ink-soft">{label}</div>
       <div className="mt-1.5 whitespace-nowrap font-mono text-xl">{value}</div>
+    </div>
+  );
+}
+
+function EnderecoFormFields({ value, onChange }: { value: EnderecoForm; onChange: (updater: (v: EnderecoForm) => EnderecoForm) => void }) {
+  function set<K extends keyof EnderecoForm>(campo: K) {
+    return (e: React.ChangeEvent<HTMLInputElement>) => onChange((v) => ({ ...v, [campo]: e.target.value }));
+  }
+  return (
+    <div className="flex flex-col gap-2.5">
+      <Input value={value.rotulo} onChange={set("rotulo")} placeholder="Rótulo (ex: Casa, Trabalho)" className="h-9.5" />
+      <div className="flex gap-2.5">
+        <Input value={value.cep} onChange={set("cep")} placeholder="CEP" className="h-9.5 flex-[2]" />
+        <Input value={value.uf} onChange={set("uf")} placeholder="UF" maxLength={2} className="h-9.5 flex-1 uppercase" />
+      </div>
+      <Input value={value.cidade} onChange={set("cidade")} placeholder="Cidade" className="h-9.5" />
+      <Input value={value.bairro} onChange={set("bairro")} placeholder="Bairro" className="h-9.5" />
+      <div className="flex gap-2.5">
+        <Input value={value.rua} onChange={set("rua")} placeholder="Rua / Avenida" className="h-9.5 flex-[2]" />
+        <Input value={value.numero} onChange={set("numero")} placeholder="Número" className="h-9.5 flex-1" />
+      </div>
+      <Input value={value.complemento} onChange={set("complemento")} placeholder="Complemento (opcional)" className="h-9.5" />
     </div>
   );
 }

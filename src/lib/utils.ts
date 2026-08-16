@@ -36,6 +36,13 @@ export function formatCNPJ(digits: string): string {
     .replace(/(\d{4})(\d)/, "$1-$2");
 }
 
+export function whatsappLink(telefone: string, mensagem?: string): string {
+  const digitsRaw = telefone.replace(/\D/g, "");
+  const digits = digitsRaw.startsWith("55") ? digitsRaw : `55${digitsRaw}`;
+  const texto = mensagem ? `?text=${encodeURIComponent(mensagem)}` : "";
+  return `https://wa.me/${digits}${texto}`;
+}
+
 export function relativeTimeFromNow(date: Date, now: Date = new Date()): string {
   const diffMs = now.getTime() - date.getTime();
   const minutes = Math.round(diffMs / 60000);

@@ -12,7 +12,7 @@ import { Modal, ModalTitle, ModalBody } from "@/components/ui/Modal";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { useToast } from "@/components/ui/Toast";
 import { drawerContent, staggerContainer, staggerItem } from "@/lib/animations";
-import { formatBRL, cn } from "@/lib/utils";
+import { formatBRL, cn, whatsappLink } from "@/lib/utils";
 import { usePedidos } from "@/lib/hooks/usePedidos";
 import { useProdutos } from "@/lib/hooks/useProdutos";
 import type { Pedido, PedidoEstado, PedidoItem, Produto } from "@/lib/types";
@@ -390,9 +390,14 @@ export default function PedidosPage() {
                   </Button>
                 )}
                 <div className="flex justify-center gap-5">
-                  <button type="button" className="cursor-pointer border-0 bg-transparent p-0 font-sans text-sm font-medium text-ink-soft">
+                  <a
+                    href={whatsappLink(selecionado.telefone, `Olá ${selecionado.cliente.split(" ")[0]}, tudo bem? Aqui é da Nova Era Tintas.`)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="cursor-pointer border-0 bg-transparent p-0 font-sans text-sm font-medium text-ink-soft"
+                  >
                     Falar no WhatsApp
-                  </button>
+                  </a>
                   {selecionado.estado === "em_negociacao" && (
                     <button
                       type="button"

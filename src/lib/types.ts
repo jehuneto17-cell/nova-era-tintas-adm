@@ -100,6 +100,13 @@ export interface EnderecoCliente {
   rotulo: string;
   texto: string;
   principal: boolean;
+  cep?: string;
+  rua?: string;
+  numero?: string;
+  complemento?: string;
+  bairro?: string;
+  cidade?: string;
+  uf?: string;
 }
 
 export interface Cliente {
