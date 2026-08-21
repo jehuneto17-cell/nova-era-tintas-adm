@@ -100,6 +100,7 @@ export interface Produto {
   descontoPct: number;
   ativo: boolean;
   cores: ProdutoCor[];
+  todasCores?: boolean;
   volumes: string[];
   variacoes: Record<string, ProdutoVariacao>;
   specs: { nome: string; valor: string }[];

@@ -5,10 +5,10 @@ import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { Search, Image as ImageIcon, X, Trash2, Loader2 } from "lucide-react";
-import { addDoc, collection, deleteDoc, doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection, deleteDoc, deleteField, doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Input } from "@/components/ui/Input";
-import { Textarea } from "@/components/ui/Input";
+import { RichTextEditor } from "@/components/ui/RichTextEditor";
 import { Switch } from "@/components/ui/Switch";
 import { Button } from "@/components/ui/Button";
 import { Modal, ModalTitle, ModalBody } from "@/components/ui/Modal";
@@ -28,6 +28,8 @@ interface Foto {
 }
 
 type ExclusaoAlvo = { tipo: "produto" } | { tipo: "cor"; nome: string } | { tipo: "volume"; nome: string };
+
+const TODAS_CORES_KEY = "__todas__";
 
 function chave(cor: string, volume: string) {
   return `${cor}|${volume}`;
@@ -56,10 +58,12 @@ export default function ProdutosPage() {
   const [desconto, setDesconto] = useState(0);
   const [salvando, setSalvando] = useState(false);
   const [cores, setCores] = useState<ProdutoCor[]>([]);
+  const [todasCores, setTodasCores] = useState(false);
   const [seletorCorAberto, setSeletorCorAberto] = useState(false);
   const [seletorVolumeAberto, setSeletorVolumeAberto] = useState(false);
   const [volumes, setVolumes] = useState<string[]>([]);
   const [vars, setVars] = useState<Record<string, ProdutoVariacao>>({});
+  const varsOriginaisRef = useRef<Record<string, ProdutoVariacao>>({});
   const [editando, setEditando] = useState<string | null>(null);
   const [precoDraft, setPrecoDraft] = useState("");
   const [estoqueDraft, setEstoqueDraft] = useState("");
@@ -106,6 +110,7 @@ export default function ProdutosPage() {
   }
 
   function estoqueTotal(p: Produto) {
+    if (p.todasCores) return Infinity;
     return Object.values(p.variacoes).reduce((a, v) => a + v.estoque, 0);
   }
 
@@ -155,8 +160,10 @@ export default function ProdutosPage() {
     setLimite(p.limiteEstoqueBaixo);
     setDesconto(p.descontoPct);
     setCores(p.cores);
+    setTodasCores(p.todasCores ?? false);
     setVolumes(p.volumes);
     setVars(p.variacoes);
+    varsOriginaisRef.current = p.variacoes;
     setSpecs(p.specs);
     setFotos(p.fotos);
     setView("editor");
@@ -208,6 +215,10 @@ export default function ProdutosPage() {
     if (!produtoId) return;
     setSalvando(true);
     try {
+      const variacoesRemovidas: Record<string, ReturnType<typeof deleteField>> = {};
+      for (const key of Object.keys(varsOriginaisRef.current)) {
+        if (!(key in vars)) variacoesRemovidas[key] = deleteField();
+      }
       await setDoc(
         doc(db, "produtos", produtoId),
         {
@@ -217,9 +228,10 @@ export default function ProdutosPage() {
           categoria: categoriaNome(produtoCategoriaId),
           limiteEstoqueBaixo: limite,
           descontoPct: desconto,
-          cores,
+          cores: todasCores ? [] : cores,
+          todasCores,
           volumes,
-          variacoes: vars,
+          variacoes: { ...variacoesRemovidas, ...vars },
           specs,
           fotos,
           ativo: produtoAtivo,
@@ -227,9 +239,11 @@ export default function ProdutosPage() {
         },
         { merge: true }
       );
+      varsOriginaisRef.current = vars;
       showToast("Produto salvo");
       setView("lista");
-    } catch {
+    } catch (err) {
+      console.error("Erro ao salvar produto", err);
       showToast("Não deu para salvar o produto. Tente de novo.");
     } finally {
       setSalvando(false);
@@ -245,6 +259,23 @@ export default function ProdutosPage() {
       }
       return next;
     });
+  }
+
+  function alternarTodasCores(ativar: boolean) {
+    setTodasCores(ativar);
+    if (ativar) {
+      setCores([]);
+      setVars((v) => {
+        const next: Record<string, ProdutoVariacao> = {};
+        for (const vol of volumes) {
+          const key = chave(TODAS_CORES_KEY, vol);
+          next[key] = v[key] ?? { cor: TODAS_CORES_KEY, volume: vol, preco: 0, estoque: 0, ativo: true };
+        }
+        return next;
+      });
+    } else {
+      setVars({});
+    }
   }
 
   function removerVolume(nome: string) {
@@ -335,7 +366,9 @@ export default function ProdutosPage() {
                 {produtos.map((p) => {
                   const { min, max } = faixaPreco(p);
                   const estoque = estoqueTotal(p);
-                  const swatch = p.cores[0]?.hex ?? "#E4E7EC";
+                  const swatch = p.todasCores
+                    ? "linear-gradient(135deg, #F04438, #F79009, #12B76A, #2E90FA, #7A5AF8)"
+                    : (p.cores[0]?.hex ?? "#E4E7EC");
                   return (
                     <div
                       key={p.id}
@@ -364,9 +397,9 @@ export default function ProdutosPage() {
                       <div className="whitespace-nowrap font-mono text-sm">
                         {min === max ? formatBRL(min) : `${formatBRL(min)} – ${formatBRL(max)}`}
                       </div>
-                      <div className="flex items-center justify-end gap-1.5 font-mono text-sm" style={{ color: estoque === 0 ? "#D92D20" : estoque < p.limiteEstoqueBaixo ? "#B54708" : "#101828" }}>
-                        {estoque}
-                        {estoque < p.limiteEstoqueBaixo && <span className="h-2 w-2 rounded-full" style={{ background: estoque === 0 ? "#D92D20" : "#B54708" }} />}
+                      <div className="flex items-center justify-end gap-1.5 font-mono text-sm" style={{ color: p.todasCores ? "#667085" : estoque === 0 ? "#D92D20" : estoque < p.limiteEstoqueBaixo ? "#B54708" : "#101828" }}>
+                        {p.todasCores ? "—" : estoque}
+                        {!p.todasCores && estoque < p.limiteEstoqueBaixo && <span className="h-2 w-2 rounded-full" style={{ background: estoque === 0 ? "#D92D20" : "#B54708" }} />}
                       </div>
                       <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
                         <Switch checked={p.ativo} onChange={() => updateDoc(doc(db, "produtos", p.id), { ativo: !p.ativo })} aria-label={`Ativar/desativar ${p.nome}`} />
@@ -461,7 +494,7 @@ export default function ProdutosPage() {
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label htmlFor="np-desc" className="text-[13px] font-medium">Descrição</label>
-                      <Textarea id="np-desc" rows={5} value={produtoDescricao} onChange={(e) => setProdutoDescricao(e.target.value)} />
+                      <RichTextEditor id="np-desc" value={produtoDescricao} onChange={setProdutoDescricao} />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label htmlFor="np-lim" className="text-[13px] font-medium">Limite de estoque baixo</label>
@@ -476,9 +509,25 @@ export default function ProdutosPage() {
 
                 <section className="min-w-0 rounded-xl border border-border bg-white p-6">
                   <h2 className="m-0 text-[17px] font-semibold">Variações</h2>
-                  <p className="mb-5 mt-1 text-[13px] text-ink-soft">Cada combinação de cor e volume tem preço e estoque próprios.</p>
+                  <p className="mb-4 mt-1 text-[13px] text-ink-soft">
+                    {todasCores
+                      ? "Preço único por volume — não controla estoque por cor."
+                      : "Cada combinação de cor e volume tem preço e estoque próprios."}
+                  </p>
+
+                  <label className="mb-5 flex w-fit cursor-pointer items-center gap-2 text-sm">
+                    <motion.input
+                      type="checkbox"
+                      checked={todasCores}
+                      onChange={(e) => alternarTodasCores(e.target.checked)}
+                      whileTap={{ scale: 0.85 }}
+                      className="h-4 w-4 accent-primary"
+                    />
+                    Disponível em todas as cores da paleta
+                  </label>
 
                   <div className="mb-5 flex flex-wrap gap-7">
+                    {!todasCores && (
                     <div>
                       <div className="mb-2 text-xs font-medium uppercase tracking-wider text-ink-soft">Cores</div>
                       <div className="flex flex-wrap gap-2">
@@ -519,6 +568,7 @@ export default function ProdutosPage() {
                         />
                       </div>
                     </div>
+                    )}
                     <div>
                       <div className="mb-2 text-xs font-medium uppercase tracking-wider text-ink-soft">Volumes</div>
                       <div className="flex flex-wrap gap-2">
@@ -546,48 +596,112 @@ export default function ProdutosPage() {
                           open={seletorVolumeAberto}
                           onOpenChange={setSeletorVolumeAberto}
                           onAdicionar={(v) =>
-                            setVolumes((atuais) => (atuais.includes(v) ? atuais : [...atuais, v]))
+                            setVolumes((atuais) => {
+                              if (atuais.includes(v)) return atuais;
+                              if (todasCores) {
+                                const key = chave(TODAS_CORES_KEY, v);
+                                setVars((vs) => ({ ...vs, [key]: vs[key] ?? { cor: TODAS_CORES_KEY, volume: v, preco: 0, estoque: 0, ativo: true } }));
+                              }
+                              return [...atuais, v];
+                            })
                           }
                         />
                       </div>
                     </div>
                   </div>
 
-                  <div className="overflow-x-auto rounded-[10px] border border-border">
-                    <div className="grid min-w-full" style={{ gridTemplateColumns: `180px repeat(${volumes.length}, minmax(130px, 1fr))` }}>
-                      <div className="sticky left-0 z-2 border-b border-r border-border bg-paper" />
-                      {volumes.map((v) => (
-                        <div key={v} className="border-b border-border bg-paper px-3 py-3 text-center text-sm font-medium">
-                          {v}
-                        </div>
-                      ))}
-                      {cores.map((c) => (
-                        <ProdutoVariacaoRow
-                          key={c.nome}
-                          cor={c}
-                          volumes={volumes}
-                          vars={vars}
-                          editando={editando}
-                          precoDraft={precoDraft}
-                          estoqueDraft={estoqueDraft}
-                          limite={limite}
-                          onCellClick={(key) => {
-                            const v = vars[key];
-                            setPrecoDraft(v ? v.preco.toFixed(2).replace(".", ",") : "");
-                            setEstoqueDraft(v ? String(v.estoque) : "");
-                            setEditando(key);
-                          }}
-                          onSalvarCelula={salvarCelula}
-                          onSetPreco={setPrecoDraft}
-                          onSetEstoque={setEstoqueDraft}
-                          onTogglePausa={toggleVarAtiva}
-                          cellColor={cellColor}
-                        />
-                      ))}
+                  {todasCores ? (
+                    <div className="overflow-x-auto rounded-[10px] border border-border">
+                      <div className="grid min-w-full" style={{ gridTemplateColumns: `repeat(${volumes.length}, minmax(130px, 1fr))` }}>
+                        {volumes.map((vol) => {
+                          const key = chave(TODAS_CORES_KEY, vol);
+                          const v = vars[key];
+                          const isEditing = editando === key;
+                          return (
+                            <div key={vol} className="flex min-h-17 flex-col border-t border-border first:border-l-0">
+                              <div className="border-b border-border bg-paper px-3 py-3 text-center text-sm font-medium">{vol}</div>
+                              <div
+                                role="gridcell"
+                                tabIndex={0}
+                                onClick={() => {
+                                  setPrecoDraft(v ? v.preco.toFixed(2).replace(".", ",") : "");
+                                  setEditando(key);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    setPrecoDraft(v ? v.preco.toFixed(2).replace(".", ",") : "");
+                                    setEditando(key);
+                                  }
+                                }}
+                                className="flex flex-1 cursor-pointer items-center justify-center px-3 py-2.5"
+                              >
+                                {isEditing ? (
+                                  <input
+                                    autoFocus
+                                    defaultValue={precoDraft}
+                                    onChange={(e) => setPrecoDraft(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        const preco = parseFloat(precoDraft.replace(",", ".")) || 0;
+                                        setVars((vs) => ({ ...vs, [key]: { cor: TODAS_CORES_KEY, volume: vol, preco, estoque: 0, ativo: true } }));
+                                        setEditando(null);
+                                      }
+                                    }}
+                                    onBlur={() => {
+                                      const preco = parseFloat(precoDraft.replace(",", ".")) || 0;
+                                      setVars((vs) => ({ ...vs, [key]: { cor: TODAS_CORES_KEY, volume: vol, preco, estoque: 0, ativo: true } }));
+                                      setEditando(null);
+                                    }}
+                                    placeholder="0,00"
+                                    className="h-7.5 w-20 rounded-md border border-border px-2 text-center font-mono text-[13px]"
+                                  />
+                                ) : (
+                                  <span className="font-mono text-[15px]">{formatBRL(v?.preco ?? 0)}</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="overflow-x-auto rounded-[10px] border border-border">
+                      <div className="grid min-w-full" style={{ gridTemplateColumns: `180px repeat(${volumes.length}, minmax(130px, 1fr))` }}>
+                        <div className="sticky left-0 z-2 border-b border-r border-border bg-paper" />
+                        {volumes.map((v) => (
+                          <div key={v} className="border-b border-border bg-paper px-3 py-3 text-center text-sm font-medium">
+                            {v}
+                          </div>
+                        ))}
+                        {cores.map((c) => (
+                          <ProdutoVariacaoRow
+                            key={c.nome}
+                            cor={c}
+                            volumes={volumes}
+                            vars={vars}
+                            editando={editando}
+                            precoDraft={precoDraft}
+                            estoqueDraft={estoqueDraft}
+                            limite={limite}
+                            onCellClick={(key) => {
+                              const v = vars[key];
+                              setPrecoDraft(v ? v.preco.toFixed(2).replace(".", ",") : "");
+                              setEstoqueDraft(v ? String(v.estoque) : "");
+                              setEditando(key);
+                            }}
+                            onSalvarCelula={salvarCelula}
+                            onSetPreco={setPrecoDraft}
+                            onSetEstoque={setEstoqueDraft}
+                            onTogglePausa={toggleVarAtiva}
+                            cellColor={cellColor}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div className="mt-3 text-[13px] text-ink-soft">
-                    {varValues.length} variações · {totalEstoque} unidades no total
+                    {todasCores ? `${volumes.length} volumes · todas as cores da paleta` : `${varValues.length} variações · ${totalEstoque} unidades no total`}
                   </div>
                 </section>
 
