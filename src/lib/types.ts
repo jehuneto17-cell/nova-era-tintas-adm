@@ -63,6 +63,15 @@ export interface Categoria {
   qtdProdutos: number;
 }
 
+export interface CorTinta {
+  id: string;
+  codigo: string;
+  nome: string;
+  familia: string;
+  hex: string;
+  ativa: boolean;
+}
+
 export interface ProdutoVariacaoChave {
   cor: string;
   volume: string;
@@ -75,6 +84,8 @@ export interface ProdutoVariacao extends ProdutoVariacaoChave {
 }
 
 export interface ProdutoCor {
+  corId?: string;
+  codigo?: string;
   nome: string;
   hex: string;
 }

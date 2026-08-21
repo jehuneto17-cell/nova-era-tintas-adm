@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { Search, Image as ImageIcon, X, Trash2, Loader2 } from "lucide-react";
@@ -17,8 +18,9 @@ import { formatBRL, cn } from "@/lib/utils";
 import { useCloudinaryUpload } from "@/lib/hooks/useCloudinaryUpload";
 import { useProdutos } from "@/lib/hooks/useProdutos";
 import { useCategorias } from "@/lib/hooks/useCategorias";
+import { useCores } from "@/lib/hooks/useCores";
 import { ACCEPTED_IMAGE_TYPES, MAX_FILE_SIZE_BYTES } from "@/lib/cloudinary";
-import type { Produto, ProdutoCor, ProdutoVariacao } from "@/lib/types";
+import type { CorTinta, Produto, ProdutoCor, ProdutoVariacao } from "@/lib/types";
 
 interface Foto {
   id: string;
@@ -35,6 +37,7 @@ export default function ProdutosPage() {
   const { showToast } = useToast();
   const { produtos: lista, loading: carregandoLista } = useProdutos();
   const { categorias } = useCategorias();
+  const { cores: paletaCores } = useCores();
   const [view, setView] = useState<"lista" | "editor">("lista");
   const [busca, setBusca] = useState("");
   const [categoria, setCategoria] = useState("");
@@ -53,6 +56,8 @@ export default function ProdutosPage() {
   const [desconto, setDesconto] = useState(0);
   const [salvando, setSalvando] = useState(false);
   const [cores, setCores] = useState<ProdutoCor[]>([]);
+  const [seletorCorAberto, setSeletorCorAberto] = useState(false);
+  const [seletorVolumeAberto, setSeletorVolumeAberto] = useState(false);
   const [volumes, setVolumes] = useState<string[]>([]);
   const [vars, setVars] = useState<Record<string, ProdutoVariacao>>({});
   const [editando, setEditando] = useState<string | null>(null);
@@ -304,7 +309,10 @@ export default function ProdutosPage() {
                 />
                 Só estoque baixo
               </label>
-              <Link href="/produtos/categorias" className="ml-auto text-sm font-medium no-underline">
+              <Link href="/produtos/cores" className="ml-auto text-sm font-medium no-underline">
+                Gerenciar cores
+              </Link>
+              <Link href="/produtos/categorias" className="text-sm font-medium no-underline">
                 Gerenciar categorias
               </Link>
             </div>
@@ -496,13 +504,19 @@ export default function ProdutosPage() {
                             </button>
                           </span>
                         ))}
-                        <button
-                          type="button"
-                          onClick={() => setCores((c) => [...c, { nome: `Nova cor ${c.length + 1}`, hex: "#C7C7C7" }])}
-                          className="cursor-pointer rounded-full border border-dashed border-border bg-transparent px-3 py-1.5 font-sans text-[13px] text-ink-soft"
-                        >
-                          + cor
-                        </button>
+                        <SeletorCorPaleta
+                          paleta={paletaCores}
+                          jaEscolhidas={cores}
+                          open={seletorCorAberto}
+                          onOpenChange={setSeletorCorAberto}
+                          onEscolher={(cor) => {
+                            setCores((c) =>
+                              c.some((x) => x.nome === cor.nome)
+                                ? c
+                                : [...c, { corId: cor.id, codigo: cor.codigo, nome: cor.nome, hex: cor.hex }]
+                            );
+                          }}
+                        />
                       </div>
                     </div>
                     <div>
@@ -527,13 +541,14 @@ export default function ProdutosPage() {
                             </button>
                           </span>
                         ))}
-                        <button
-                          type="button"
-                          onClick={() => setVolumes((v) => [...v, `${v.length + 1}L`])}
-                          className="cursor-pointer rounded-full border border-dashed border-border bg-transparent px-3 py-1.5 font-sans text-[13px] text-ink-soft"
-                        >
-                          + volume
-                        </button>
+                        <SeletorVolume
+                          jaExistentes={volumes}
+                          open={seletorVolumeAberto}
+                          onOpenChange={setSeletorVolumeAberto}
+                          onAdicionar={(v) =>
+                            setVolumes((atuais) => (atuais.includes(v) ? atuais : [...atuais, v]))
+                          }
+                        />
                       </div>
                     </div>
                   </div>
@@ -836,7 +851,15 @@ function ProdutoVariacaoRow({
             className="net-cell relative flex min-h-17 cursor-pointer flex-col items-center justify-center gap-0.5 border-t border-l border-border px-3 py-2.5"
           >
             {isEditing ? (
-              <div className="flex flex-col items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+              <div
+                className="flex flex-col items-center gap-1.5"
+                onClick={(e) => e.stopPropagation()}
+                onBlur={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                    onSalvarCelula(key);
+                  }
+                }}
+              >
                 <div className="flex gap-1.5">
                   <input
                     autoFocus
@@ -898,6 +921,222 @@ function ProdutoVariacaoRow({
           </div>
         );
       })}
+    </>
+  );
+}
+
+function SeletorCorPaleta({
+  paleta,
+  jaEscolhidas,
+  open,
+  onOpenChange,
+  onEscolher,
+}: {
+  paleta: CorTinta[];
+  jaEscolhidas: ProdutoCor[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onEscolher: (cor: CorTinta) => void;
+}) {
+  const [busca, setBusca] = useState("");
+  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  const buscaNorm = busca.trim().toLowerCase();
+  const resultados = useMemo(() => {
+    const escolhidasNomes = new Set(jaEscolhidas.map((c) => c.nome));
+    const disponiveis = paleta.filter((c) => c.ativa && !escolhidasNomes.has(c.nome));
+    if (!buscaNorm) return disponiveis.slice(0, 60);
+    return disponiveis
+      .filter((c) => c.nome.toLowerCase().includes(buscaNorm) || c.codigo.toLowerCase().includes(buscaNorm))
+      .slice(0, 60);
+  }, [paleta, jaEscolhidas, buscaNorm]);
+
+  function abrir() {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const espacoAbaixo = window.innerHeight - rect.bottom;
+    const paraCima = espacoAbaixo < 380;
+    setPos({
+      left: rect.left,
+      ...(paraCima ? { bottom: window.innerHeight - rect.top + 6 } : { top: rect.bottom + 6 }),
+    });
+    setBusca("");
+    onOpenChange(true);
+  }
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => (open ? onOpenChange(false) : abrir())}
+        className="cursor-pointer rounded-full border border-dashed border-border bg-transparent px-3 py-1.5 font-sans text-[13px] text-ink-soft"
+      >
+        + cor
+      </button>
+      {open &&
+        pos &&
+        createPortal(
+          <AnimatePresence>
+            <div key="cor-picker-backdrop" onClick={() => onOpenChange(false)} className="fixed inset-0 z-40" />
+            <motion.div
+              key="cor-picker-menu"
+              initial={{ opacity: 0, y: pos.bottom !== undefined ? 4 : -4, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: pos.bottom !== undefined ? 4 : -4, scale: 0.97 }}
+              transition={{ duration: 0.14 }}
+              style={{ left: pos.left, top: pos.top, bottom: pos.bottom }}
+              className="fixed z-50 w-80 overflow-hidden rounded-[10px] border border-border bg-white shadow-[0_12px_28px_rgba(16,24,40,0.16)]"
+            >
+              <div className="border-b border-border p-2.5">
+                <Input
+                  autoFocus
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  placeholder="Buscar cor (nome ou código)"
+                  className="h-8.5 text-sm"
+                />
+              </div>
+              <div className="max-h-72 overflow-y-auto p-1.5">
+                {resultados.length === 0 ? (
+                  <p className="p-3 text-center text-[13px] text-ink-soft">
+                    Nenhuma cor encontrada.{" "}
+                    <Link href="/produtos/cores" className="font-medium no-underline">
+                      Cadastrar na paleta
+                    </Link>
+                  </p>
+                ) : (
+                  resultados.map((cor) => (
+                    <button
+                      key={cor.id}
+                      type="button"
+                      onClick={() => {
+                        onEscolher(cor);
+                        onOpenChange(false);
+                      }}
+                      className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-0 bg-transparent px-2.5 py-2 text-left font-sans"
+                    >
+                      <span
+                        className="h-5 w-5 shrink-0 rounded-[5px] border border-black/10"
+                        style={{ background: cor.hex }}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-[13px]">{cor.nome}</span>
+                      <span className="shrink-0 font-mono text-[11px] text-ink-soft">{cor.codigo}</span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </AnimatePresence>,
+          document.body
+        )}
+    </>
+  );
+}
+
+const UNIDADES_VOLUME = ["L", "mL", "Kg", "G", "Unid."] as const;
+
+function SeletorVolume({
+  jaExistentes,
+  open,
+  onOpenChange,
+  onAdicionar,
+}: {
+  jaExistentes: string[];
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onAdicionar: (valor: string) => void;
+}) {
+  const [quantidade, setQuantidade] = useState("");
+  const [unidade, setUnidade] = useState<(typeof UNIDADES_VOLUME)[number]>("L");
+  const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const valorFormatado = quantidade.trim() ? `${quantidade.trim().replace(".", ",")}${unidade}` : "";
+  const duplicado = valorFormatado !== "" && jaExistentes.includes(valorFormatado);
+
+  function abrir() {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const espacoAbaixo = window.innerHeight - rect.bottom;
+    const paraCima = espacoAbaixo < 220;
+    setPos({
+      left: rect.left,
+      ...(paraCima ? { bottom: window.innerHeight - rect.top + 6 } : { top: rect.bottom + 6 }),
+    });
+    setQuantidade("");
+    setUnidade("L");
+    onOpenChange(true);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }
+
+  function confirmar() {
+    if (!valorFormatado || duplicado) return;
+    onAdicionar(valorFormatado);
+    onOpenChange(false);
+  }
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => (open ? onOpenChange(false) : abrir())}
+        className="cursor-pointer rounded-full border border-dashed border-border bg-transparent px-3 py-1.5 font-sans text-[13px] text-ink-soft"
+      >
+        + volume
+      </button>
+      {open &&
+        pos &&
+        createPortal(
+          <AnimatePresence>
+            <div key="vol-picker-backdrop" onClick={() => onOpenChange(false)} className="fixed inset-0 z-40" />
+            <motion.div
+              key="vol-picker-menu"
+              initial={{ opacity: 0, y: pos.bottom !== undefined ? 4 : -4, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: pos.bottom !== undefined ? 4 : -4, scale: 0.97 }}
+              transition={{ duration: 0.14 }}
+              style={{ left: pos.left, top: pos.top, bottom: pos.bottom }}
+              className="fixed z-50 w-64 overflow-hidden rounded-[10px] border border-border bg-white p-3 shadow-[0_12px_28px_rgba(16,24,40,0.16)]"
+            >
+              <div className="flex items-center gap-2">
+                <Input
+                  ref={inputRef}
+                  value={quantidade}
+                  onChange={(e) => setQuantidade(e.target.value.replace(/[^0-9.,]/g, ""))}
+                  onKeyDown={(e) => e.key === "Enter" && confirmar()}
+                  placeholder="Quantidade"
+                  inputMode="decimal"
+                  className="h-8.5 min-w-0 flex-1 text-sm"
+                />
+                <select
+                  value={unidade}
+                  onChange={(e) => setUnidade(e.target.value as (typeof UNIDADES_VOLUME)[number])}
+                  className="h-8.5 shrink-0 rounded-lg border border-border bg-white px-2 text-sm"
+                >
+                  {UNIDADES_VOLUME.map((u) => (
+                    <option key={u} value={u}>
+                      {u}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {duplicado && <p className="mt-1.5 text-[12px] text-red-600">Esse volume já existe.</p>}
+              <Button
+                type="button"
+                onClick={confirmar}
+                disabled={!valorFormatado || duplicado}
+                className="mt-2.5 w-full"
+              >
+                Adicionar {valorFormatado || ""}
+              </Button>
+            </motion.div>
+          </AnimatePresence>,
+          document.body
+        )}
     </>
   );
 }

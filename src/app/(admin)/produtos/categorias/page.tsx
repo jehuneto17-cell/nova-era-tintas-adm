@@ -273,31 +273,34 @@ export default function CategoriasPage() {
                 >
                   <GripVertical size={16} className="net-grip cursor-grab justify-self-center text-ink-soft opacity-0 transition-opacity" />
 
-                  <div
-                    className="relative flex h-23 w-42 items-end overflow-hidden rounded-[10px] p-2.5"
-                    style={{ background: c.fotoUrl ? undefined : c.fundo || "#9AA0A6" }}
-                  >
-                    {c.fotoUrl && (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={c.fotoUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
-                    )}
-                    <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(16,24,40,0) 40%, rgba(16,24,40,0.5))" }} />
-                    <div className="relative flex items-center gap-1.5 text-white">
-                      <Icon size={15} strokeWidth={1.8} />
-                      <span className="text-[13px] font-semibold">{c.nome}</span>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={enviandoEstaFoto}
-                      onClick={() => {
-                        fotoAlvoRef.current = c.id;
-                        fileInputRef.current?.click();
-                      }}
-                      className="absolute right-2 top-2 flex cursor-pointer items-center gap-1 rounded-full border-0 bg-white/90 px-2.5 py-1.5 font-sans text-[11px] font-semibold text-ink disabled:cursor-not-allowed disabled:opacity-70"
+                  <div className="flex flex-col gap-1.5">
+                    <div
+                      className="relative flex h-23 w-42 items-end overflow-hidden rounded-[10px] p-2.5"
+                      style={{ background: c.fotoUrl ? undefined : c.fundo || "#9AA0A6" }}
                     >
-                      {enviandoEstaFoto && <Loader2 size={11} className="animate-spin" />}
-                      Trocar foto
-                    </button>
+                      {c.fotoUrl && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={c.fotoUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                      )}
+                      <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(16,24,40,0) 40%, rgba(16,24,40,0.5))" }} />
+                      <div className="relative flex items-center gap-1.5 text-white">
+                        <Icon size={15} strokeWidth={1.8} />
+                        <span className="text-[13px] font-semibold">{c.nome}</span>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={enviandoEstaFoto}
+                        onClick={() => {
+                          fotoAlvoRef.current = c.id;
+                          fileInputRef.current?.click();
+                        }}
+                        className="absolute right-2 top-2 flex cursor-pointer items-center gap-1 rounded-full border-0 bg-white/90 px-2.5 py-1.5 font-sans text-[11px] font-semibold text-ink disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        {enviandoEstaFoto && <Loader2 size={11} className="animate-spin" />}
+                        Trocar foto
+                      </button>
+                    </div>
+                    <span className="text-center text-[11px] text-ink-soft">Recomendado: 672 × 368px</span>
                   </div>
 
                   <div className="flex min-w-0 flex-col gap-2">
