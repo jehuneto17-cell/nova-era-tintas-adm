@@ -743,7 +743,7 @@ export default function ProdutosPage() {
                 </section>
               </div>
 
-              <div className="flex min-w-0 flex-col gap-6">
+              <div className="sticky top-28 flex min-w-0 flex-col gap-6">
                 <section className="rounded-xl border border-border bg-white p-6">
                   <h2 className="m-0 mb-1 text-[17px] font-semibold">Fotos</h2>
                   <p className="mb-4 mt-0 text-[13px] text-ink-soft text-pretty">Arraste para reordenar, ou solte arquivos aqui para enviar. A primeira é a capa na busca do app.</p>
@@ -839,22 +839,29 @@ export default function ProdutosPage() {
 
                 <section className="rounded-xl border border-border bg-white p-6">
                   <h2 className="m-0 mb-4 text-[17px] font-semibold">Preço</h2>
+                  <p className="mb-4 text-xs text-ink-soft text-pretty">
+                    O preço cadastrado em cada variação (cor/volume) é o <strong>preço a prazo</strong>. O desconto abaixo define o <strong>preço à vista</strong>.
+                  </p>
                   <div className="flex flex-col gap-1.5">
-                    <label htmlFor="np-desc-pct" className="text-[13px] font-medium">Desconto</label>
+                    <label htmlFor="np-desc-pct" className="text-[13px] font-medium">Desconto à vista</label>
                     <div className="flex items-center gap-2">
                       <Input id="np-desc-pct" type="number" value={desconto} onChange={(e) => setDesconto(Number(e.target.value))} className="w-22.5 font-mono" />
                       <span className="text-sm text-ink-soft">%</span>
                     </div>
                   </div>
                   {desconto > 0 && (
-                    <div className="mt-3 font-mono text-[15px]">
-                      {formatBRL(precoMin * (1 - desconto / 100))} – {formatBRL(precoMax * (1 - desconto / 100))}
-                      <span className="ml-2 text-ink-soft line-through">
-                        {formatBRL(precoMin)} – {formatBRL(precoMax)}
-                      </span>
+                    <div className="mt-3 flex flex-col gap-1 text-[15px]">
+                      <div className="flex items-center gap-2">
+                        <span className="w-24 shrink-0 text-xs text-ink-soft">À vista</span>
+                        <span className="font-mono">{formatBRL(precoMin * (1 - desconto / 100))} – {formatBRL(precoMax * (1 - desconto / 100))}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-24 shrink-0 text-xs text-ink-soft">A prazo</span>
+                        <span className="font-mono text-ink-soft line-through">{formatBRL(precoMin)} – {formatBRL(precoMax)}</span>
+                      </div>
                     </div>
                   )}
-                  <p className="mt-3 text-xs text-ink-soft">O desconto vale para todas as variações.</p>
+                  <p className="mt-3 text-xs text-ink-soft">O desconto à vista vale para todas as variações do produto.</p>
                 </section>
               </div>
             </div>
