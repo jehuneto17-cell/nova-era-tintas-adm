@@ -59,6 +59,7 @@ export default function ProdutosPage() {
   const [salvando, setSalvando] = useState(false);
   const [cores, setCores] = useState<ProdutoCor[]>([]);
   const [todasCores, setTodasCores] = useState(false);
+  const [ambientes, setAmbientes] = useState<("interior" | "exterior")[]>([]);
   const [seletorCorAberto, setSeletorCorAberto] = useState(false);
   const [seletorVolumeAberto, setSeletorVolumeAberto] = useState(false);
   const [volumes, setVolumes] = useState<string[]>([]);
@@ -161,6 +162,7 @@ export default function ProdutosPage() {
     setDesconto(p.descontoPct);
     setCores(p.cores);
     setTodasCores(p.todasCores ?? false);
+    setAmbientes(p.ambientes ?? []);
     setVolumes(p.volumes);
     setVars(p.variacoes);
     varsOriginaisRef.current = p.variacoes;
@@ -204,7 +206,8 @@ export default function ProdutosPage() {
         fotos: [],
       });
       showToast("Produto criado — preencha e salve");
-    } catch {
+    } catch (err) {
+      console.error("Erro ao criar produto", err);
       showToast("Não deu para criar o produto. Tente de novo.");
     } finally {
       setCriandoProduto(false);
@@ -230,6 +233,7 @@ export default function ProdutosPage() {
           descontoPct: desconto,
           cores: todasCores ? [] : cores,
           todasCores,
+          ambientes,
           volumes,
           variacoes: { ...variacoesRemovidas, ...vars },
           specs,
@@ -259,6 +263,12 @@ export default function ProdutosPage() {
       }
       return next;
     });
+  }
+
+  function alternarAmbiente(ambiente: "interior" | "exterior", ativo: boolean) {
+    setAmbientes((atuais) =>
+      ativo ? (atuais.includes(ambiente) ? atuais : [...atuais, ambiente]) : atuais.filter((a) => a !== ambiente)
+    );
   }
 
   function alternarTodasCores(ativar: boolean) {
@@ -392,7 +402,14 @@ export default function ProdutosPage() {
                         )}
                       </div>
                       <div className="text-sm font-medium">{p.nome}</div>
-                      <div className="text-sm text-ink-soft">{p.categoria}</div>
+                      <div className="flex flex-wrap items-center gap-1.5 text-sm text-ink-soft">
+                        {p.categoria}
+                        {p.ambientes?.map((a) => (
+                          <span key={a} className="rounded-full border border-border bg-paper px-2 py-0.5 text-[11px] font-medium capitalize text-ink-soft">
+                            {a}
+                          </span>
+                        ))}
+                      </div>
                       <div className="font-mono text-sm text-ink-soft">{Object.keys(p.variacoes).length}</div>
                       <div className="whitespace-nowrap font-mono text-sm">
                         {min === max ? formatBRL(min) : `${formatBRL(min)} – ${formatBRL(max)}`}
@@ -503,6 +520,31 @@ export default function ProdutosPage() {
                         <span className="text-sm text-ink-soft">unidades</span>
                       </div>
                       <span className="text-xs text-ink-soft">Abaixo disso, o produto aparece marcado na lista.</span>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[13px] font-medium">Ambiente</span>
+                      <div className="flex gap-4">
+                        <label className="flex cursor-pointer items-center gap-2 text-sm">
+                          <motion.input
+                            type="checkbox"
+                            checked={ambientes.includes("interior")}
+                            onChange={(e) => alternarAmbiente("interior", e.target.checked)}
+                            whileTap={{ scale: 0.85 }}
+                            className="h-4 w-4 accent-primary"
+                          />
+                          Interior
+                        </label>
+                        <label className="flex cursor-pointer items-center gap-2 text-sm">
+                          <motion.input
+                            type="checkbox"
+                            checked={ambientes.includes("exterior")}
+                            onChange={(e) => alternarAmbiente("exterior", e.target.checked)}
+                            whileTap={{ scale: 0.85 }}
+                            className="h-4 w-4 accent-primary"
+                          />
+                          Exterior
+                        </label>
+                      </div>
                     </div>
                   </div>
                 </section>

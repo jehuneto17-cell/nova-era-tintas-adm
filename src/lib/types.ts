@@ -105,6 +105,7 @@ export interface Produto {
   variacoes: Record<string, ProdutoVariacao>;
   specs: { nome: string; valor: string }[];
   fotos: { id: string; url: string }[];
+  ambientes?: ("interior" | "exterior")[];
 }
 
 export interface EnderecoCliente {
