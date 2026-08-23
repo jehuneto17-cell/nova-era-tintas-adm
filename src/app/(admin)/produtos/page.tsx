@@ -18,7 +18,7 @@ import { formatBRL, cn } from "@/lib/utils";
 import { useCloudinaryUpload } from "@/lib/hooks/useCloudinaryUpload";
 import { useProdutos } from "@/lib/hooks/useProdutos";
 import { useCategorias } from "@/lib/hooks/useCategorias";
-import { useCores } from "@/lib/hooks/useCores";
+import { useCores, useCoresCoral } from "@/lib/hooks/useCores";
 import { ACCEPTED_IMAGE_TYPES, MAX_FILE_SIZE_BYTES } from "@/lib/cloudinary";
 import type { CorTinta, Produto, ProdutoCor, ProdutoVariacao } from "@/lib/types";
 
@@ -27,7 +27,11 @@ interface Foto {
   url: string;
 }
 
-type ExclusaoAlvo = { tipo: "produto" } | { tipo: "cor"; nome: string } | { tipo: "volume"; nome: string };
+type ExclusaoAlvo =
+  | { tipo: "produto" }
+  | { tipo: "cor"; nome: string }
+  | { tipo: "volume"; nome: string }
+  | { tipo: "paleta"; paleta: "suvinil" | "coral" };
 
 const TODAS_CORES_KEY = "__todas__";
 
@@ -40,6 +44,7 @@ export default function ProdutosPage() {
   const { produtos: lista, loading: carregandoLista } = useProdutos();
   const { categorias } = useCategorias();
   const { cores: paletaCores } = useCores();
+  const { cores: paletaCoresCoral } = useCoresCoral();
   const [view, setView] = useState<"lista" | "editor">("lista");
   const [busca, setBusca] = useState("");
   const [categoria, setCategoria] = useState("");
@@ -59,6 +64,7 @@ export default function ProdutosPage() {
   const [salvando, setSalvando] = useState(false);
   const [cores, setCores] = useState<ProdutoCor[]>([]);
   const [todasCores, setTodasCores] = useState(false);
+  const [paletaTodasCores, setPaletaTodasCores] = useState<"suvinil" | "coral">("suvinil");
   const [ambientes, setAmbientes] = useState<("interior" | "exterior")[]>([]);
   const [seletorCorAberto, setSeletorCorAberto] = useState(false);
   const [seletorVolumeAberto, setSeletorVolumeAberto] = useState(false);
@@ -162,6 +168,7 @@ export default function ProdutosPage() {
     setDesconto(p.descontoPct);
     setCores(p.cores);
     setTodasCores(p.todasCores ?? false);
+    setPaletaTodasCores(p.paletaTodasCores ?? "suvinil");
     setAmbientes(p.ambientes ?? []);
     setVolumes(p.volumes);
     setVars(p.variacoes);
@@ -233,6 +240,7 @@ export default function ProdutosPage() {
           descontoPct: desconto,
           cores: todasCores ? [] : cores,
           todasCores,
+          paletaTodasCores: todasCores ? paletaTodasCores : deleteField(),
           ambientes,
           volumes,
           variacoes: { ...variacoesRemovidas, ...vars },
@@ -271,21 +279,36 @@ export default function ProdutosPage() {
     );
   }
 
-  function alternarTodasCores(ativar: boolean) {
-    setTodasCores(ativar);
-    if (ativar) {
-      setCores([]);
-      setVars((v) => {
-        const next: Record<string, ProdutoVariacao> = {};
-        for (const vol of volumes) {
-          const key = chave(TODAS_CORES_KEY, vol);
-          next[key] = v[key] ?? { cor: TODAS_CORES_KEY, volume: vol, preco: 0, estoque: 0, ativo: true };
-        }
-        return next;
-      });
-    } else {
+  function selecionarModoCores(modo: "especificas" | "suvinil" | "coral") {
+    if (modo === "especificas") {
+      setTodasCores(false);
       setVars({});
+      return;
     }
+    setTodasCores(true);
+    setPaletaTodasCores(modo);
+    setCores([]);
+    setVars((v) => {
+      const next: Record<string, ProdutoVariacao> = {};
+      for (const vol of volumes) {
+        const key = chave(TODAS_CORES_KEY, vol);
+        next[key] = v[key] ?? { cor: TODAS_CORES_KEY, volume: vol, preco: 0, estoque: 0, ativo: true };
+      }
+      return next;
+    });
+  }
+
+  function trocarPaletaEspecifica(paleta: "suvinil" | "coral") {
+    if (paleta === paletaTodasCores) return;
+    if (cores.length === 0) {
+      setPaletaTodasCores(paleta);
+      return;
+    }
+    setConfirmarExcluir({
+      titulo: `Trocar para paleta ${paleta === "coral" ? "Coral" : "Suvinil"}?`,
+      corpo: `${cores.length} cor(es) escolhida(s) da paleta atual somem junto com as variações. Isso não volta atrás.`,
+      alvo: { tipo: "paleta", paleta },
+    });
   }
 
   function removerVolume(nome: string) {
@@ -352,6 +375,9 @@ export default function ProdutosPage() {
               </label>
               <Link href="/produtos/cores" className="ml-auto text-sm font-medium no-underline">
                 Gerenciar cores
+              </Link>
+              <Link href="/produtos/cores-coral" className="text-sm font-medium no-underline">
+                Gerenciar cores Coral
               </Link>
               <Link href="/produtos/categorias" className="text-sm font-medium no-underline">
                 Gerenciar categorias
@@ -557,21 +583,70 @@ export default function ProdutosPage() {
                       : "Cada combinação de cor e volume tem preço e estoque próprios."}
                   </p>
 
-                  <label className="mb-5 flex w-fit cursor-pointer items-center gap-2 text-sm">
-                    <motion.input
-                      type="checkbox"
-                      checked={todasCores}
-                      onChange={(e) => alternarTodasCores(e.target.checked)}
-                      whileTap={{ scale: 0.85 }}
-                      className="h-4 w-4 accent-primary"
-                    />
-                    Disponível em todas as cores da paleta
-                  </label>
+                  <div className="mb-5 flex flex-wrap gap-4">
+                    <label className="flex w-fit cursor-pointer items-center gap-2 text-sm">
+                      <motion.input
+                        type="radio"
+                        name="modoCores"
+                        checked={!todasCores}
+                        onChange={() => selecionarModoCores("especificas")}
+                        whileTap={{ scale: 0.85 }}
+                        className="h-4 w-4 accent-primary"
+                      />
+                      Cores específicas
+                    </label>
+                    <label className="flex w-fit cursor-pointer items-center gap-2 text-sm">
+                      <motion.input
+                        type="radio"
+                        name="modoCores"
+                        checked={todasCores && paletaTodasCores === "suvinil"}
+                        onChange={() => selecionarModoCores("suvinil")}
+                        whileTap={{ scale: 0.85 }}
+                        className="h-4 w-4 accent-primary"
+                      />
+                      Cores Suvinil
+                    </label>
+                    <label className="flex w-fit cursor-pointer items-center gap-2 text-sm">
+                      <motion.input
+                        type="radio"
+                        name="modoCores"
+                        checked={todasCores && paletaTodasCores === "coral"}
+                        onChange={() => selecionarModoCores("coral")}
+                        whileTap={{ scale: 0.85 }}
+                        className="h-4 w-4 accent-primary"
+                      />
+                      Cores Coral
+                    </label>
+                  </div>
 
                   <div className="mb-5 flex flex-wrap gap-7">
                     {!todasCores && (
                     <div>
-                      <div className="mb-2 text-xs font-medium uppercase tracking-wider text-ink-soft">Cores</div>
+                      <div className="mb-2 flex items-center gap-3">
+                        <span className="text-xs font-medium uppercase tracking-wider text-ink-soft">Cores</span>
+                        <div className="flex overflow-hidden rounded-full border border-border text-[12px]">
+                          <button
+                            type="button"
+                            onClick={() => trocarPaletaEspecifica("suvinil")}
+                            className={cn(
+                              "cursor-pointer border-0 px-2.5 py-1 font-medium transition-colors",
+                              paletaTodasCores === "suvinil" ? "bg-primary text-white" : "bg-transparent text-ink-soft"
+                            )}
+                          >
+                            Suvinil
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => trocarPaletaEspecifica("coral")}
+                            className={cn(
+                              "cursor-pointer border-0 px-2.5 py-1 font-medium transition-colors",
+                              paletaTodasCores === "coral" ? "bg-primary text-white" : "bg-transparent text-ink-soft"
+                            )}
+                          >
+                            Coral
+                          </button>
+                        </div>
+                      </div>
                       <div className="flex flex-wrap gap-2">
                         {cores.map((c) => (
                           <span key={c.nome} className="inline-flex items-center gap-2 rounded-full border border-border bg-paper px-3 py-1.5 text-[13px]">
@@ -596,7 +671,8 @@ export default function ProdutosPage() {
                           </span>
                         ))}
                         <SeletorCorPaleta
-                          paleta={paletaCores}
+                          paleta={paletaTodasCores === "coral" ? paletaCoresCoral : paletaCores}
+                          linkCadastro={paletaTodasCores === "coral" ? "/produtos/cores-coral" : "/produtos/cores"}
                           jaEscolhidas={cores}
                           open={seletorCorAberto}
                           onOpenChange={setSeletorCorAberto}
@@ -743,7 +819,9 @@ export default function ProdutosPage() {
                     </div>
                   )}
                   <div className="mt-3 text-[13px] text-ink-soft">
-                    {todasCores ? `${volumes.length} volumes · todas as cores da paleta` : `${varValues.length} variações · ${totalEstoque} unidades no total`}
+                    {todasCores
+                      ? `${volumes.length} volumes · todas as cores ${paletaTodasCores === "coral" ? "Coral" : "Suvinil"}`
+                      : `${varValues.length} variações · ${totalEstoque} unidades no total`}
                   </div>
                 </section>
 
@@ -937,6 +1015,13 @@ export default function ProdutosPage() {
                 setConfirmarExcluir(null);
                 return;
               }
+              if (alvo.tipo === "paleta") {
+                setCores([]);
+                setVars({});
+                setPaletaTodasCores(alvo.paleta);
+                setConfirmarExcluir(null);
+                return;
+              }
               if (!produtoId) return;
               setExcluindo(true);
               try {
@@ -951,7 +1036,7 @@ export default function ProdutosPage() {
               }
             }}
           >
-            Excluir
+            {confirmarExcluir?.alvo.tipo === "paleta" ? "Trocar" : "Excluir"}
           </Button>
         </div>
       </Modal>
@@ -1094,12 +1179,14 @@ function SeletorCorPaleta({
   open,
   onOpenChange,
   onEscolher,
+  linkCadastro = "/produtos/cores",
 }: {
   paleta: CorTinta[];
   jaEscolhidas: ProdutoCor[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onEscolher: (cor: CorTinta) => void;
+  linkCadastro?: string;
 }) {
   const [busca, setBusca] = useState("");
   const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
@@ -1165,7 +1252,7 @@ function SeletorCorPaleta({
                 {resultados.length === 0 ? (
                   <p className="p-3 text-center text-[13px] text-ink-soft">
                     Nenhuma cor encontrada.{" "}
-                    <Link href="/produtos/cores" className="font-medium no-underline">
+                    <Link href={linkCadastro} className="font-medium no-underline">
                       Cadastrar na paleta
                     </Link>
                   </p>

@@ -101,6 +101,7 @@ export interface Produto {
   ativo: boolean;
   cores: ProdutoCor[];
   todasCores?: boolean;
+  paletaTodasCores?: "suvinil" | "coral";
   volumes: string[];
   variacoes: Record<string, ProdutoVariacao>;
   specs: { nome: string; valor: string }[];
