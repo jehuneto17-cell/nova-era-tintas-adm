@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
-import { Search, Image as ImageIcon, X, Trash2, Loader2 } from "lucide-react";
+import { Search, Image as ImageIcon, X, Trash2, Loader2, Copy } from "lucide-react";
 import { addDoc, collection, deleteDoc, deleteField, doc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Input } from "@/components/ui/Input";
@@ -50,6 +50,7 @@ export default function ProdutosPage() {
   const [categoria, setCategoria] = useState("");
   const [soBaixo, setSoBaixo] = useState(false);
   const [criandoProduto, setCriandoProduto] = useState(false);
+  const [copiaDeNome, setCopiaDeNome] = useState<string | null>(null);
   const [confirmarExcluir, setConfirmarExcluir] = useState<{ titulo: string; corpo: string; alvo: ExclusaoAlvo } | null>(null);
   const [excluindo, setExcluindo] = useState(false);
 
@@ -158,7 +159,8 @@ export default function ProdutosPage() {
   const precoMin = precos.length > 0 ? Math.min(...precos) : 0;
   const precoMax = precos.length > 0 ? Math.max(...precos) : 0;
 
-  function abrirEditor(p: Produto) {
+  function abrirEditor(p: Produto, copiaDe?: string) {
+    setCopiaDeNome(copiaDe ?? null);
     setProdutoId(p.id);
     setProdutoNome(p.nome);
     setProdutoCategoriaId(p.categoriaId);
@@ -216,6 +218,41 @@ export default function ProdutosPage() {
     } catch (err) {
       console.error("Erro ao criar produto", err);
       showToast("Não deu para criar o produto. Tente de novo.");
+    } finally {
+      setCriandoProduto(false);
+    }
+  }
+
+  async function duplicarProduto(original: Produto) {
+    setCriandoProduto(true);
+    try {
+      const variacoesZeradas = Object.fromEntries(
+        Object.entries(original.variacoes).map(([key, v]) => [key, { ...v, estoque: 0 }])
+      );
+      const dados = {
+        nome: `${original.nome} (cópia)`,
+        categoriaId: original.categoriaId,
+        categoria: original.categoria,
+        descricao: original.descricao,
+        limiteEstoqueBaixo: original.limiteEstoqueBaixo,
+        descontoPct: original.descontoPct,
+        ativo: false,
+        cores: original.cores,
+        todasCores: original.todasCores ?? false,
+        ...(original.todasCores ? { paletaTodasCores: original.paletaTodasCores ?? "suvinil" } : {}),
+        ambientes: original.ambientes ?? [],
+        volumes: original.volumes,
+        variacoes: variacoesZeradas,
+        specs: original.specs,
+        fotos: original.fotos,
+        criado_em: serverTimestamp(),
+      };
+      const ref = await addDoc(collection(db, "produtos"), dados);
+      abrirEditor({ ...dados, id: ref.id }, original.nome);
+      showToast("Cópia criada — ajuste o nome e salve");
+    } catch (err) {
+      console.error("Erro ao duplicar produto", err);
+      showToast("Não deu para duplicar o produto. Tente de novo.");
     } finally {
       setCriandoProduto(false);
     }
@@ -390,7 +427,7 @@ export default function ProdutosPage() {
               </div>
             ) : produtos.length > 0 ? (
               <div className="mt-5 overflow-x-auto rounded-xl border border-border bg-white">
-                <div className="grid grid-cols-[64px_minmax(220px,2.4fr)_minmax(110px,1fr)_80px_minmax(160px,1.4fr)_100px_64px] items-center gap-3 border-b border-border bg-paper px-5 text-xs font-medium uppercase tracking-wider text-ink-soft" style={{ height: 44 }}>
+                <div className="grid grid-cols-[64px_minmax(220px,2.4fr)_minmax(110px,1fr)_80px_minmax(160px,1.4fr)_100px_64px_44px] items-center gap-3 border-b border-border bg-paper px-5 text-xs font-medium uppercase tracking-wider text-ink-soft" style={{ height: 44 }}>
                   <div />
                   <div>Produto</div>
                   <div>Categoria</div>
@@ -398,6 +435,7 @@ export default function ProdutosPage() {
                   <div>Preço</div>
                   <div className="text-right">Estoque</div>
                   <div className="text-right">Ativo</div>
+                  <div />
                 </div>
                 {produtos.map((p) => {
                   const { min, max } = faixaPreco(p);
@@ -417,7 +455,7 @@ export default function ProdutosPage() {
                           abrirEditor(p);
                         }
                       }}
-                      className="grid min-h-15 cursor-pointer grid-cols-[64px_minmax(220px,2.4fr)_minmax(110px,1fr)_80px_minmax(160px,1.4fr)_100px_64px] items-center gap-3 border-b border-border px-5 transition-colors hover:bg-black/[0.02]"
+                      className="grid min-h-15 cursor-pointer grid-cols-[64px_minmax(220px,2.4fr)_minmax(110px,1fr)_80px_minmax(160px,1.4fr)_100px_64px_44px] items-center gap-3 border-b border-border px-5 transition-colors hover:bg-black/[0.02]"
                     >
                       <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border border-border bg-paper">
                         {p.fotos[0] ? (
@@ -446,6 +484,18 @@ export default function ProdutosPage() {
                       </div>
                       <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
                         <Switch checked={p.ativo} onChange={() => updateDoc(doc(db, "produtos", p.id), { ativo: !p.ativo })} aria-label={`Ativar/desativar ${p.nome}`} />
+                      </div>
+                      <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          disabled={criandoProduto}
+                          onClick={() => duplicarProduto(p)}
+                          aria-label={`Duplicar ${p.nome}`}
+                          title="Duplicar"
+                          className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent text-ink-soft transition-colors hover:bg-black/[0.04] hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Copy size={16} strokeWidth={1.8} />
+                        </button>
                       </div>
                     </div>
                   );
@@ -510,6 +560,12 @@ export default function ProdutosPage() {
                 </div>
               </div>
             </div>
+
+            {copiaDeNome && (
+              <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-5 py-3.5 text-[13px] text-amber-900">
+                Você está criando uma cópia de <strong>&quot;{copiaDeNome}&quot;</strong>. O produto original não será alterado. Ajuste o nome antes de salvar.
+              </div>
+            )}
 
             <div className="mt-6 grid grid-cols-1 items-start gap-6 lg:grid-cols-[62fr_38fr]">
               <div className="flex min-w-0 flex-col gap-6">
