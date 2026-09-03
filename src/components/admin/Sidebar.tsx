@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion } from "framer-motion";
-import { LayoutGrid, ClipboardList, BadgeCheck, User, Settings, Palette, LogOut } from "lucide-react";
+import { LayoutDashboard, LayoutGrid, ClipboardList, BadgeCheck, User, Settings, Palette, LogOut } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { auth, ADMIN_EMAIL } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
@@ -12,6 +12,7 @@ import { pulse } from "@/lib/animations";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, badge: false },
   { href: "/produtos", label: "Produtos", icon: LayoutGrid, badge: false },
   { href: "/pedidos", label: "Pedidos", icon: ClipboardList, badge: false },
   { href: "/conferencia", label: "Conferência", icon: BadgeCheck, badge: true },
