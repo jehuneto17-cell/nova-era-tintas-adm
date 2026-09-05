@@ -12,7 +12,7 @@ import { Modal, ModalTitle, ModalBody } from "@/components/ui/Modal";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { useToast } from "@/components/ui/Toast";
 import { drawerContent, staggerContainer, staggerItem } from "@/lib/animations";
-import { formatBRL, cn, whatsappLink } from "@/lib/utils";
+import { formatBRL, cn, whatsappLink, rotuloVariacao } from "@/lib/utils";
 import { usePedidos } from "@/lib/hooks/usePedidos";
 import { useProdutos } from "@/lib/hooks/useProdutos";
 import type { Pedido, PedidoEstado, PedidoItem, Produto } from "@/lib/types";
@@ -820,14 +820,14 @@ function AdicionarItemModal({
                     onAdicionar({
                       produtoId: produtoSel.id,
                       nome: produtoSel.nome,
-                      variacao: `${v.cor} · ${v.volume}`,
+                      variacao: rotuloVariacao(v),
                       qtd: 1,
                       preco: v.preco,
                     })
                   }
                   className="flex cursor-pointer items-center justify-between rounded-lg border border-border bg-transparent px-3.5 py-2.5 text-left font-sans hover:border-primary"
                 >
-                  <span className="text-sm">{v.cor} · {v.volume}</span>
+                  <span className="text-sm">{rotuloVariacao(v)}</span>
                   <span className="font-mono text-[13px]">{formatBRL(v.preco)}</span>
                 </button>
               ))}

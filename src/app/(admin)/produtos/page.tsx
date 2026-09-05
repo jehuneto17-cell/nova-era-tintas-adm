@@ -19,6 +19,7 @@ import { useCloudinaryUpload } from "@/lib/hooks/useCloudinaryUpload";
 import { useProdutos } from "@/lib/hooks/useProdutos";
 import { useCategorias } from "@/lib/hooks/useCategorias";
 import { useCores, useCoresCoral } from "@/lib/hooks/useCores";
+import { useUnidadesVolume, salvarUnidadesVolume } from "@/lib/hooks/useUnidadesVolume";
 import { ACCEPTED_IMAGE_TYPES, MAX_FILE_SIZE_BYTES } from "@/lib/cloudinary";
 import type { CorTinta, Produto, ProdutoCor, ProdutoVariacao } from "@/lib/types";
 
@@ -31,9 +32,11 @@ type ExclusaoAlvo =
   | { tipo: "produto" }
   | { tipo: "cor"; nome: string }
   | { tipo: "volume"; nome: string }
-  | { tipo: "paleta"; paleta: "suvinil" | "coral" };
+  | { tipo: "paleta"; paleta: "suvinil" | "coral" }
+  | { tipo: "trocarTipo"; novoTipo: "tinta" | "item" };
 
 const TODAS_CORES_KEY = "__todas__";
+const SEM_COR_KEY = "__item__";
 
 function chave(cor: string, volume: string) {
   return `${cor}|${volume}`;
@@ -45,6 +48,7 @@ export default function ProdutosPage() {
   const { categorias } = useCategorias();
   const { cores: paletaCores } = useCores();
   const { cores: paletaCoresCoral } = useCoresCoral();
+  const { unidades: unidadesVolume } = useUnidadesVolume();
   const [view, setView] = useState<"lista" | "editor">("lista");
   const [busca, setBusca] = useState("");
   const [categoria, setCategoria] = useState("");
@@ -63,6 +67,7 @@ export default function ProdutosPage() {
   const [limite, setLimite] = useState(15);
   const [desconto, setDesconto] = useState(0);
   const [salvando, setSalvando] = useState(false);
+  const [tipoProduto, setTipoProduto] = useState<"tinta" | "item">("tinta");
   const [cores, setCores] = useState<ProdutoCor[]>([]);
   const [todasCores, setTodasCores] = useState(false);
   const [paletaTodasCores, setPaletaTodasCores] = useState<"suvinil" | "coral">("suvinil");
@@ -168,6 +173,7 @@ export default function ProdutosPage() {
     setProdutoAtivo(p.ativo);
     setLimite(p.limiteEstoqueBaixo);
     setDesconto(p.descontoPct);
+    setTipoProduto(p.tipo ?? "tinta");
     setCores(p.cores);
     setTodasCores(p.todasCores ?? false);
     setPaletaTodasCores(p.paletaTodasCores ?? "suvinil");
@@ -237,6 +243,7 @@ export default function ProdutosPage() {
         limiteEstoqueBaixo: original.limiteEstoqueBaixo,
         descontoPct: original.descontoPct,
         ativo: false,
+        tipo: original.tipo ?? "tinta",
         cores: original.cores,
         todasCores: original.todasCores ?? false,
         ...(original.todasCores ? { paletaTodasCores: original.paletaTodasCores ?? "suvinil" } : {}),
@@ -275,8 +282,9 @@ export default function ProdutosPage() {
           categoria: categoriaNome(produtoCategoriaId),
           limiteEstoqueBaixo: limite,
           descontoPct: desconto,
-          cores: todasCores ? [] : cores,
-          todasCores,
+          tipo: tipoProduto,
+          cores: tipoProduto === "item" ? [] : todasCores ? [] : cores,
+          todasCores: tipoProduto === "item" ? false : todasCores,
           paletaTodasCores: todasCores ? paletaTodasCores : deleteField(),
           ambientes,
           volumes,
@@ -634,11 +642,59 @@ export default function ProdutosPage() {
                 <section className="min-w-0 rounded-xl border border-border bg-white p-6">
                   <h2 className="m-0 text-[17px] font-semibold">Variações</h2>
                   <p className="mb-4 mt-1 text-[13px] text-ink-soft">
-                    {todasCores
-                      ? "Preço único por volume — não controla estoque por cor."
-                      : "Cada combinação de cor e volume tem preço e estoque próprios."}
+                    {tipoProduto === "item"
+                      ? "Cada tamanho/medida tem preço e estoque próprios."
+                      : todasCores
+                        ? "Preço único por volume — não controla estoque por cor."
+                        : "Cada combinação de cor e volume tem preço e estoque próprios."}
                   </p>
 
+                  <div className="mb-5 flex overflow-hidden rounded-full border border-border text-[12px] w-fit">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (tipoProduto === "tinta") return;
+                        if (varValues.length > 0) {
+                          setConfirmarExcluir({
+                            titulo: "Trocar para Tinta?",
+                            corpo: `${varValues.length} variações somem junto. Isso não volta atrás.`,
+                            alvo: { tipo: "trocarTipo", novoTipo: "tinta" },
+                          });
+                          return;
+                        }
+                        setTipoProduto("tinta");
+                      }}
+                      className={cn(
+                        "cursor-pointer border-0 px-3.5 py-1.5 font-medium transition-colors",
+                        tipoProduto === "tinta" ? "bg-primary text-white" : "bg-transparent text-ink-soft"
+                      )}
+                    >
+                      Tinta
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (tipoProduto === "item") return;
+                        if (varValues.length > 0) {
+                          setConfirmarExcluir({
+                            titulo: "Trocar para Item?",
+                            corpo: `${varValues.length} variações somem junto. Isso não volta atrás.`,
+                            alvo: { tipo: "trocarTipo", novoTipo: "item" },
+                          });
+                          return;
+                        }
+                        setTipoProduto("item");
+                      }}
+                      className={cn(
+                        "cursor-pointer border-0 px-3.5 py-1.5 font-medium transition-colors",
+                        tipoProduto === "item" ? "bg-primary text-white" : "bg-transparent text-ink-soft"
+                      )}
+                    >
+                      Item
+                    </button>
+                  </div>
+
+                  {tipoProduto === "tinta" && (
                   <div className="mb-5 flex flex-wrap gap-4">
                     <label className="flex w-fit cursor-pointer items-center gap-2 text-sm">
                       <motion.input
@@ -674,9 +730,10 @@ export default function ProdutosPage() {
                       Cores Coral
                     </label>
                   </div>
+                  )}
 
                   <div className="mb-5 flex flex-wrap gap-7">
-                    {!todasCores && (
+                    {tipoProduto === "tinta" && !todasCores && (
                     <div>
                       <div className="mb-2 flex items-center gap-3">
                         <span className="text-xs font-medium uppercase tracking-wider text-ink-soft">Cores</span>
@@ -744,7 +801,9 @@ export default function ProdutosPage() {
                     </div>
                     )}
                     <div>
-                      <div className="mb-2 text-xs font-medium uppercase tracking-wider text-ink-soft">Volumes</div>
+                      <div className="mb-2 text-xs font-medium uppercase tracking-wider text-ink-soft">
+                        {tipoProduto === "item" ? "Tamanho/Medida" : "Volumes"}
+                      </div>
                       <div className="flex flex-wrap gap-2">
                         {volumes.map((v) => (
                           <span key={v} className="inline-flex items-center gap-2 rounded-full border border-border bg-paper px-3 py-1.5 text-[13px]">
@@ -754,7 +813,7 @@ export default function ProdutosPage() {
                               onClick={() =>
                                 setConfirmarExcluir({
                                   titulo: `Remover ${v}?`,
-                                  corpo: "As variações desse volume somem junto. Isso não volta atrás.",
+                                  corpo: "As variações desse valor somem junto. Isso não volta atrás.",
                                   alvo: { tipo: "volume", nome: v },
                                 })
                               }
@@ -766,6 +825,7 @@ export default function ProdutosPage() {
                           </span>
                         ))}
                         <SeletorVolume
+                          unidades={unidadesVolume}
                           jaExistentes={volumes}
                           open={seletorVolumeAberto}
                           onOpenChange={setSeletorVolumeAberto}
@@ -776,6 +836,10 @@ export default function ProdutosPage() {
                                 const key = chave(TODAS_CORES_KEY, v);
                                 setVars((vs) => ({ ...vs, [key]: vs[key] ?? { cor: TODAS_CORES_KEY, volume: v, preco: 0, estoque: 0, ativo: true } }));
                               }
+                              if (tipoProduto === "item") {
+                                const key = chave(SEM_COR_KEY, v);
+                                setVars((vs) => ({ ...vs, [key]: vs[key] ?? { cor: SEM_COR_KEY, volume: v, preco: 0, estoque: 0, ativo: true } }));
+                              }
                               return [...atuais, v];
                             })
                           }
@@ -784,7 +848,38 @@ export default function ProdutosPage() {
                     </div>
                   </div>
 
-                  {todasCores ? (
+                  {tipoProduto === "item" ? (
+                    <div className="overflow-x-auto rounded-[10px] border border-border">
+                      <div className="grid min-w-full" style={{ gridTemplateColumns: `repeat(${volumes.length}, minmax(130px, 1fr))` }}>
+                        {volumes.map((v) => (
+                          <div key={v} className="border-b border-border bg-paper px-3 py-3 text-center text-sm font-medium">
+                            {v}
+                          </div>
+                        ))}
+                        <ProdutoVariacaoRow
+                          cor={{ nome: SEM_COR_KEY, hex: "" }}
+                          volumes={volumes}
+                          vars={vars}
+                          editando={editando}
+                          precoDraft={precoDraft}
+                          estoqueDraft={estoqueDraft}
+                          limite={limite}
+                          onCellClick={(key) => {
+                            const v = vars[key];
+                            setPrecoDraft(v ? v.preco.toFixed(2).replace(".", ",") : "");
+                            setEstoqueDraft(v ? String(v.estoque) : "");
+                            setEditando(key);
+                          }}
+                          onSalvarCelula={salvarCelula}
+                          onSetPreco={setPrecoDraft}
+                          onSetEstoque={setEstoqueDraft}
+                          onTogglePausa={toggleVarAtiva}
+                          cellColor={cellColor}
+                          semRotulo
+                        />
+                      </div>
+                    </div>
+                  ) : todasCores ? (
                     <div className="overflow-x-auto rounded-[10px] border border-border">
                       <div className="grid min-w-full" style={{ gridTemplateColumns: `repeat(${volumes.length}, minmax(130px, 1fr))` }}>
                         {volumes.map((vol) => {
@@ -1078,6 +1173,14 @@ export default function ProdutosPage() {
                 setConfirmarExcluir(null);
                 return;
               }
+              if (alvo.tipo === "trocarTipo") {
+                setCores([]);
+                setTodasCores(false);
+                setVars({});
+                setTipoProduto(alvo.novoTipo);
+                setConfirmarExcluir(null);
+                return;
+              }
               if (!produtoId) return;
               setExcluindo(true);
               try {
@@ -1092,7 +1195,7 @@ export default function ProdutosPage() {
               }
             }}
           >
-            {confirmarExcluir?.alvo.tipo === "paleta" ? "Trocar" : "Excluir"}
+            {confirmarExcluir?.alvo.tipo === "paleta" || confirmarExcluir?.alvo.tipo === "trocarTipo" ? "Trocar" : "Excluir"}
           </Button>
         </div>
       </Modal>
@@ -1114,6 +1217,7 @@ function ProdutoVariacaoRow({
   onSetEstoque,
   onTogglePausa,
   cellColor,
+  semRotulo,
 }: {
   cor: ProdutoCor;
   volumes: string[];
@@ -1128,13 +1232,16 @@ function ProdutoVariacaoRow({
   onSetEstoque: (v: string) => void;
   onTogglePausa: (key: string) => void;
   cellColor: (estoque: number) => string;
+  semRotulo?: boolean;
 }) {
   return (
     <>
-      <div className="sticky left-0 z-2 flex items-center gap-2 border-r border-t border-border bg-paper px-3 py-3 text-sm font-medium">
-        <span className="h-3.5 w-3.5 shrink-0 rounded-[3px] border border-black/10" style={{ background: cor.hex }} />
-        {cor.nome}
-      </div>
+      {!semRotulo && (
+        <div className="sticky left-0 z-2 flex items-center gap-2 border-r border-t border-border bg-paper px-3 py-3 text-sm font-medium">
+          <span className="h-3.5 w-3.5 shrink-0 rounded-[3px] border border-black/10" style={{ background: cor.hex }} />
+          {cor.nome}
+        </div>
+      )}
       {volumes.map((vol) => {
         const key = chave(cor.nome, vol);
         const v = vars[key];
@@ -1341,21 +1448,23 @@ function SeletorCorPaleta({
   );
 }
 
-const UNIDADES_VOLUME = ["L", "mL", "Kg", "G", "Unid."] as const;
-
 function SeletorVolume({
+  unidades,
   jaExistentes,
   open,
   onOpenChange,
   onAdicionar,
 }: {
+  unidades: string[];
   jaExistentes: string[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAdicionar: (valor: string) => void;
 }) {
   const [quantidade, setQuantidade] = useState("");
-  const [unidade, setUnidade] = useState<(typeof UNIDADES_VOLUME)[number]>("L");
+  const [unidade, setUnidade] = useState(unidades[0] ?? "");
+  const [gerenciando, setGerenciando] = useState(false);
+  const [novaUnidade, setNovaUnidade] = useState("");
   const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1367,13 +1476,14 @@ function SeletorVolume({
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const espacoAbaixo = window.innerHeight - rect.bottom;
-    const paraCima = espacoAbaixo < 220;
+    const paraCima = espacoAbaixo < 260;
     setPos({
       left: rect.left,
       ...(paraCima ? { bottom: window.innerHeight - rect.top + 6 } : { top: rect.bottom + 6 }),
     });
     setQuantidade("");
-    setUnidade("L");
+    setUnidade(unidades[0] ?? "");
+    setGerenciando(false);
     onOpenChange(true);
     requestAnimationFrame(() => inputRef.current?.focus());
   }
@@ -1382,6 +1492,19 @@ function SeletorVolume({
     if (!valorFormatado || duplicado) return;
     onAdicionar(valorFormatado);
     onOpenChange(false);
+  }
+
+  async function adicionarUnidade() {
+    const nome = novaUnidade.trim();
+    if (!nome || unidades.includes(nome)) return;
+    await salvarUnidadesVolume([...unidades, nome]);
+    setUnidade(nome);
+    setNovaUnidade("");
+  }
+
+  async function removerUnidade(nome: string) {
+    await salvarUnidadesVolume(unidades.filter((u) => u !== nome));
+    if (unidade === nome) setUnidade(unidades.find((u) => u !== nome) ?? "");
   }
 
   return (
@@ -1408,37 +1531,86 @@ function SeletorVolume({
               style={{ left: pos.left, top: pos.top, bottom: pos.bottom }}
               className="fixed z-50 w-64 overflow-hidden rounded-[10px] border border-border bg-white p-3 shadow-[0_12px_28px_rgba(16,24,40,0.16)]"
             >
-              <div className="flex items-center gap-2">
-                <Input
-                  ref={inputRef}
-                  value={quantidade}
-                  onChange={(e) => setQuantidade(e.target.value.replace(/[^0-9.,]/g, ""))}
-                  onKeyDown={(e) => e.key === "Enter" && confirmar()}
-                  placeholder="Quantidade"
-                  inputMode="decimal"
-                  className="h-8.5 min-w-0 flex-1 text-sm"
-                />
-                <select
-                  value={unidade}
-                  onChange={(e) => setUnidade(e.target.value as (typeof UNIDADES_VOLUME)[number])}
-                  className="h-8.5 shrink-0 rounded-lg border border-border bg-white px-2 text-sm"
-                >
-                  {UNIDADES_VOLUME.map((u) => (
-                    <option key={u} value={u}>
-                      {u}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {duplicado && <p className="mt-1.5 text-[12px] text-red-600">Esse volume já existe.</p>}
-              <Button
-                type="button"
-                onClick={confirmar}
-                disabled={!valorFormatado || duplicado}
-                className="mt-2.5 w-full"
-              >
-                Adicionar {valorFormatado || ""}
-              </Button>
+              {gerenciando ? (
+                <>
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {unidades.map((u) => (
+                      <span key={u} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-paper px-2.5 py-1 text-[12px]">
+                        {u}
+                        <button
+                          type="button"
+                          onClick={() => removerUnidade(u)}
+                          aria-label={`Remover unidade ${u}`}
+                          className="cursor-pointer border-0 bg-transparent p-0 leading-none text-ink-soft"
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      autoFocus
+                      value={novaUnidade}
+                      onChange={(e) => setNovaUnidade(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && adicionarUnidade()}
+                      placeholder="Nova unidade"
+                      className="h-8.5 min-w-0 flex-1 text-sm"
+                    />
+                    <Button type="button" onClick={adicionarUnidade} disabled={!novaUnidade.trim()} className="shrink-0">
+                      +
+                    </Button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setGerenciando(false)}
+                    className="mt-2.5 cursor-pointer border-0 bg-transparent p-0 font-sans text-[12px] font-medium text-primary"
+                  >
+                    ← Voltar
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      ref={inputRef}
+                      value={quantidade}
+                      onChange={(e) => setQuantidade(e.target.value.replace(/[^0-9.,]/g, ""))}
+                      onKeyDown={(e) => e.key === "Enter" && confirmar()}
+                      placeholder="Quantidade"
+                      inputMode="decimal"
+                      className="h-8.5 min-w-0 flex-1 text-sm"
+                    />
+                    <select
+                      value={unidade}
+                      onChange={(e) => setUnidade(e.target.value)}
+                      className="h-8.5 shrink-0 rounded-lg border border-border bg-white px-2 text-sm"
+                    >
+                      {unidades.map((u) => (
+                        <option key={u} value={u}>
+                          {u}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {duplicado && <p className="mt-1.5 text-[12px] text-red-600">Esse volume já existe.</p>}
+                  <Button
+                    type="button"
+                    onClick={confirmar}
+                    disabled={!valorFormatado || duplicado}
+                    className="mt-2.5 w-full"
+                  >
+                    Adicionar {valorFormatado || ""}
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() => setGerenciando(true)}
+                    className="mt-2.5 cursor-pointer border-0 bg-transparent p-0 font-sans text-[12px] font-medium text-ink-soft underline decoration-1 underline-offset-2"
+                  >
+                    Gerenciar unidades
+                  </button>
+                </>
+              )}
             </motion.div>
           </AnimatePresence>,
           document.body

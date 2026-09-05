@@ -4,6 +4,12 @@ export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
 }
 
+const CORES_CORINGA = new Set(["__todas__", "__item__"]);
+
+export function rotuloVariacao(v: { cor: string; volume: string }): string {
+  return CORES_CORINGA.has(v.cor) ? v.volume : `${v.cor} · ${v.volume}`;
+}
+
 export function formatBRL(value: number): string {
   return "R$ " + value.toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d)(?=,))/g, ".");
 }

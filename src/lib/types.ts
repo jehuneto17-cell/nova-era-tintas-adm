@@ -99,6 +99,7 @@ export interface Produto {
   limiteEstoqueBaixo: number;
   descontoPct: number;
   ativo: boolean;
+  tipo?: "tinta" | "item";
   cores: ProdutoCor[];
   todasCores?: boolean;
   paletaTodasCores?: "suvinil" | "coral";
