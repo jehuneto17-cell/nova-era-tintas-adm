@@ -141,6 +141,20 @@ export default function ProdutosPage() {
     return "#667085";
   }
 
+  async function fotoVariacao(key: string, file?: File) {
+    if (!file) return;
+    const [r] = await uploadMany([file]);
+    if (!r) return;
+    setVars((v) => ({ ...v, [key]: { ...v[key], foto: r.url } }));
+  }
+
+  function removerFotoVariacao(key: string) {
+    setVars((v) => {
+      const { foto: _foto, ...resto } = v[key];
+      return { ...v, [key]: resto };
+    });
+  }
+
   function salvarCelula(key: string) {
     const preco = parseFloat(precoDraft.replace(",", ".")) || 0;
     const estoque = parseInt(estoqueDraft, 10) || 0;
@@ -877,6 +891,30 @@ export default function ProdutosPage() {
                           cellColor={cellColor}
                           semRotulo
                         />
+                        {volumes.map((vol) => {
+                          const key = chave(SEM_COR_KEY, vol);
+                          const v = vars[key];
+                          return (
+                            <div key={key} className="flex flex-col items-center gap-1.5 border-t border-l border-border px-3 py-3">
+                              {v?.foto ? (
+                                <>
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={v.foto} alt="" className="h-16 w-16 rounded-md object-cover" />
+                                  <button type="button" onClick={() => removerFotoVariacao(key)} className="cursor-pointer border-0 bg-transparent p-0 text-[11px] font-medium text-[#B54708]">
+                                    Remover foto
+                                  </button>
+                                </>
+                              ) : v ? (
+                                <label className="cursor-pointer text-xs font-medium text-primary">
+                                  {uploading ? "Enviando..." : "+ Foto da variação"}
+                                  <input type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(e) => { fotoVariacao(key, e.target.files?.[0]); e.target.value = ""; }} />
+                                </label>
+                              ) : (
+                                <span className="text-[11px] text-ink-soft">Defina preço antes</span>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   ) : todasCores ? (

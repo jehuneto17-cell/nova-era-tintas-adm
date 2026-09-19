@@ -80,6 +80,7 @@ export interface ProdutoVariacao extends ProdutoVariacaoChave {
   preco: number;
   estoque: number;
   ativo: boolean;
+  foto?: string;
 }
 
 export interface ProdutoCor {
