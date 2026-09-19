@@ -42,6 +42,7 @@ import { Switch } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
 import { staggerContainer, staggerItem, cardHover } from "@/lib/animations";
 import { useCategorias } from "@/lib/hooks/useCategorias";
+import { useProdutos } from "@/lib/hooks/useProdutos";
 import { useCloudinaryUpload } from "@/lib/hooks/useCloudinaryUpload";
 import { ACCEPTED_IMAGE_TYPES } from "@/lib/cloudinary";
 import type { Categoria } from "@/lib/types";
@@ -105,6 +106,7 @@ const ICONE_IDS = Object.keys(ICONES);
 export default function CategoriasPage() {
   const { showToast } = useToast();
   const { categorias, loading } = useCategorias();
+  const { produtos } = useProdutos();
   const [drag, setDrag] = useState<string | null>(null);
   const [nova, setNova] = useState(false);
   const [novoNome, setNovoNome] = useState("");
@@ -145,7 +147,6 @@ export default function CategoriasPage() {
         fundo: "#9AA0A6",
         ordem: proximaOrdem,
         ativa: true,
-        qtdProdutos: 0,
       });
       setNova(false);
       setNovoNome("");
@@ -198,7 +199,12 @@ export default function CategoriasPage() {
     }
   }
 
+  function qtdProdutos(categoriaId: string) {
+    return produtos.filter((p) => p.categoriaId === categoriaId).length;
+  }
+
   const removendoCategoria = removendo ? categorias.find((c) => c.id === removendo) : null;
+  const removendoQtd = removendoCategoria ? qtdProdutos(removendoCategoria.id) : 0;
 
   return (
     <main className="min-w-0 flex-1 p-10">
@@ -251,6 +257,7 @@ export default function CategoriasPage() {
           <AnimatePresence initial={false}>
             {categorias.map((c) => {
               const Icon = ICONES[c.icone] ?? Tag;
+              const qtd = qtdProdutos(c.id);
               const enviandoEstaFoto = uploading && enviandoFotoId === c.id;
               return (
                 <motion.div
@@ -340,7 +347,7 @@ export default function CategoriasPage() {
                         </button>
                       </div>
                       <span className="text-[13px] text-ink-soft">
-                        <span className="font-mono text-ink">{c.qtdProdutos}</span> {c.qtdProdutos === 1 ? "produto" : "produtos"}
+                        <span className="font-mono text-ink">{qtd}</span> {qtd === 1 ? "produto" : "produtos"}
                       </span>
                     </div>
                   </div>
@@ -458,8 +465,8 @@ export default function CategoriasPage() {
       <Modal open={!!removendo} onClose={() => setRemovendo(null)} maxWidth={440}>
         <ModalTitle>Excluir a categoria?</ModalTitle>
         <ModalBody>
-          {removendoCategoria && removendoCategoria.qtdProdutos > 0
-            ? `Os ${removendoCategoria.qtdProdutos} produtos dela não são apagados — só ficam sem categoria até você reorganizar.`
+          {removendoQtd > 0
+            ? `Os ${removendoQtd} produtos dela não são apagados — só ficam sem categoria até você reorganizar.`
             : "Ela não tem produtos, então nada mais é afetado."}
         </ModalBody>
         <div className="mt-5.5 flex justify-end gap-3">

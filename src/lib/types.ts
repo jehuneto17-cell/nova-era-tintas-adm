@@ -60,7 +60,6 @@ export interface Categoria {
   fundo: string;
   ordem: number;
   ativa: boolean;
-  qtdProdutos: number;
 }
 
 export interface CorTinta {
