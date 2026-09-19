@@ -302,7 +302,11 @@ export default function ProdutosPage() {
           paletaTodasCores: todasCores ? paletaTodasCores : deleteField(),
           ambientes,
           volumes,
-          variacoes: { ...variacoesRemovidas, ...vars },
+          variacoes: {
+            ...variacoesRemovidas,
+            // merge:true não apaga campo omitido; foto removida precisa de deleteField
+            ...Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, v.foto ? v : { ...v, foto: deleteField() }])),
+          },
           specs,
           fotos,
           ativo: produtoAtivo,
