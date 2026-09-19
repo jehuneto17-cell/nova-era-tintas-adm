@@ -1469,7 +1469,9 @@ function SeletorVolume({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const valorFormatado = quantidade.trim() ? `${quantidade.trim().replace(".", ",")}${unidade}` : "";
+  const valorFormatado = quantidade.trim()
+    ? `${quantidade.includes("/") ? quantidade.trim() : quantidade.trim().replace(".", ",")}${unidade}`
+    : "";
   const duplicado = valorFormatado !== "" && jaExistentes.includes(valorFormatado);
 
   function abrir() {
@@ -1575,7 +1577,7 @@ function SeletorVolume({
                     <Input
                       ref={inputRef}
                       value={quantidade}
-                      onChange={(e) => setQuantidade(e.target.value.replace(/[^0-9.,]/g, ""))}
+                      onChange={(e) => setQuantidade(e.target.value.replace(/[^0-9.,\/]/g, ""))}
                       onKeyDown={(e) => e.key === "Enter" && confirmar()}
                       placeholder="Quantidade"
                       inputMode="decimal"
