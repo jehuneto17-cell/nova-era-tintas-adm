@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import { collection, onSnapshot, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { Pedido } from "@/lib/types";
 
@@ -10,15 +10,19 @@ export function usePedidosAguardandoConfirmacao(): { pedidos: Pedido[]; loading:
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(
-      collection(db, "pedidos"),
-      where("estado", "==", "aguardando_confirmacao"),
-      orderBy("comprovanteEnviadoEm", "asc")
-    );
+    // ordenação em memória (não no Firestore): orderBy() excluiria pedidos
+    // sem comprovanteEnviadoEm preenchido, sumindo da lista de conferência
+    const q = query(collection(db, "pedidos"), where("estado", "==", "aguardando_confirmacao"));
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        setPedidos(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Pedido));
+        const lista = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }) as Pedido);
+        lista.sort((a, b) => {
+          const ta = a.comprovanteEnviadoEm ? new Date(a.comprovanteEnviadoEm).getTime() : 0;
+          const tb = b.comprovanteEnviadoEm ? new Date(b.comprovanteEnviadoEm).getTime() : 0;
+          return ta - tb;
+        });
+        setPedidos(lista);
         setLoading(false);
       },
       () => {
