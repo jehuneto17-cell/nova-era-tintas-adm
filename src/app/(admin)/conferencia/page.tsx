@@ -26,16 +26,18 @@ export default function ConferenciaPage() {
   const [motivo, setMotivo] = useState("");
   const [motivoCustom, setMotivoCustom] = useState("");
   const [processando, setProcessando] = useState(false);
+  const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
-      if (dialogo) setDialogo(null);
+      if (fotoAmpliada) setFotoAmpliada(null);
+      else if (dialogo) setDialogo(null);
       else if (selId) setSelId(null);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [dialogo, selId]);
+  }, [dialogo, selId, fotoAmpliada]);
 
   useEffect(() => {
     getDoc(doc(db, "configuracoes", "pagamento"))
@@ -212,6 +214,7 @@ export default function ConferenciaPage() {
                   setMotivoCustom("");
                   setDialogo("recusar");
                 }}
+                onAmpliarFoto={setFotoAmpliada}
               />
             </motion.div>
           </motion.div>
@@ -264,6 +267,31 @@ export default function ConferenciaPage() {
           </Button>
         </div>
       </Modal>
+
+      <AnimatePresence>
+        {fotoAmpliada && (
+          <motion.div
+            key="foto-ampliada"
+            variants={fadeIn}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            onClick={() => setFotoAmpliada(null)}
+            className="fixed inset-0 z-[60] flex cursor-zoom-out items-center justify-center bg-[rgba(16,24,40,0.85)] p-6"
+          >
+            <button
+              type="button"
+              onClick={() => setFotoAmpliada(null)}
+              aria-label="Fechar"
+              className="fixed right-6 top-6 flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border-0 bg-white/10 text-white"
+            >
+              <X size={20} />
+            </button>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={fotoAmpliada} alt="Comprovante ampliado" className="max-h-full max-w-full rounded-lg object-contain" />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </main>
   );
 }
@@ -274,12 +302,14 @@ function ConferenciaDrawer({
   onClose,
   onAprovar,
   onRecusar,
+  onAmpliarFoto,
 }: {
   pedido: Pedido;
   total: number;
   onClose: () => void;
   onAprovar: () => void;
   onRecusar: () => void;
+  onAmpliarFoto: (url: string) => void;
 }) {
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -328,7 +358,13 @@ function ConferenciaDrawer({
         <div className="flex flex-col gap-7">
           <div>
             <div className="mb-2.5 text-[11px] font-medium uppercase tracking-wider text-ink-soft">Comprovante</div>
-            <div className="relative flex aspect-[4/5] w-full items-center justify-center overflow-hidden rounded-lg border border-border bg-paper">
+            <div
+              className={cn(
+                "relative flex aspect-[4/5] w-full items-center justify-center overflow-hidden rounded-lg border border-border bg-paper",
+                comprovanteUrl && "cursor-zoom-in"
+              )}
+              onClick={() => comprovanteUrl && onAmpliarFoto(comprovanteUrl)}
+            >
               {comprovanteUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={comprovanteUrl} alt="Comprovante enviado pelo cliente" className="h-full w-full object-contain" />
