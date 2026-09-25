@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Copy, ChevronUp, ChevronDown, X, MessageCircle, Loader2 } from "lucide-react";
-import { doc, updateDoc } from "firebase/firestore";
+import { doc, updateDoc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Input";
@@ -12,7 +12,7 @@ import { Modal, ModalTitle, ModalBody } from "@/components/ui/Modal";
 import { StatusDot } from "@/components/ui/StatusDot";
 import { useToast } from "@/components/ui/Toast";
 import { drawerContent, staggerContainer, staggerItem } from "@/lib/animations";
-import { formatBRL, cn, whatsappLink, rotuloVariacao } from "@/lib/utils";
+import { formatBRL, cn, whatsappLink, rotuloVariacao, montarMensagemPedido } from "@/lib/utils";
 import { usePedidos } from "@/lib/hooks/usePedidos";
 import { useProdutos } from "@/lib/hooks/useProdutos";
 import type { Pedido, PedidoEstado, PedidoItem, Produto } from "@/lib/types";
@@ -110,6 +110,24 @@ export default function PedidosPage() {
 
   function fmtTotal(p: Pedido) {
     return p.itens.reduce((a, it) => a + it.preco * it.qtd, 0) + p.frete;
+  }
+
+  async function enviarConfirmacao(p: Pedido) {
+    const snap = await getDoc(doc(db, "configuracoes", "whatsapp"));
+    const template = (snap.data()?.mensagem as string | undefined)?.trim();
+    if (!template) {
+      showToast("Cadastre a mensagem de confirmação em Configurações > WhatsApp primeiro.");
+      return;
+    }
+    const itensTexto = p.itens.map((it) => `${it.qtd}× ${it.nome} (${it.variacao})`).join("\n");
+    const mensagem = montarMensagemPedido(template, {
+      nome: p.cliente.split(" ")[0],
+      itens: itensTexto,
+      total: formatBRL(fmtTotal(p)),
+      pedido: `#${p.numero}`,
+      link: `https://novaeratintas.store/pedidos/${p.id}`,
+    });
+    window.open(whatsappLink(p.telefone, mensagem), "_blank");
   }
 
   async function avancarPara(id: string, novoEstado: PedidoEstado, observacao: string) {
@@ -390,6 +408,13 @@ export default function PedidosPage() {
                   </Button>
                 )}
                 <div className="flex justify-center gap-5">
+                  <button
+                    type="button"
+                    onClick={() => enviarConfirmacao(selecionado)}
+                    className="cursor-pointer border-0 bg-transparent p-0 font-sans text-sm font-medium text-ink-soft"
+                  >
+                    Enviar confirmação
+                  </button>
                   <a
                     href={whatsappLink(selecionado.telefone, `Olá ${selecionado.cliente.split(" ")[0]}, tudo bem? Aqui é da Nova Era Tintas.`)}
                     target="_blank"

@@ -49,6 +49,27 @@ export function whatsappLink(telefone: string, mensagem?: string): string {
   return `https://wa.me/${digits}${texto}`;
 }
 
+export interface DadosMensagemPedido {
+  nome: string;
+  itens: string;
+  total: string;
+  pedido: string;
+  link?: string;
+}
+
+// ponytail: {link} só é trocado quando `dados.link` vem preenchido (domínio real
+// no ar). Sem isso, a chave {link} é removida do texto em vez de virar URL quebrada.
+export function montarMensagemPedido(template: string, dados: DadosMensagemPedido): string {
+  return template
+    .replaceAll("{nome}", dados.nome)
+    .replaceAll("{itens}", dados.itens)
+    .replaceAll("{total}", dados.total)
+    .replaceAll("{pedido}", dados.pedido)
+    .replaceAll("{link}", dados.link ?? "")
+    .replace(/[ \t]*\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export function relativeTimeFromNow(date: Date, now: Date = new Date()): string {
   const diffMs = now.getTime() - date.getTime();
   const minutes = Math.round(diffMs / 60000);
