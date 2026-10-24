@@ -80,6 +80,7 @@ export default function ProdutosPage() {
   const [editando, setEditando] = useState<string | null>(null);
   const [precoDraft, setPrecoDraft] = useState("");
   const [estoqueDraft, setEstoqueDraft] = useState("");
+  const [descDraft, setDescDraft] = useState("");
   const [specs, setSpecs] = useState<{ nome: string; valor: string }[]>([]);
   const [fotos, setFotos] = useState<Foto[]>([]);
   const [dragFoto, setDragFoto] = useState<string | null>(null);
@@ -159,7 +160,9 @@ export default function ProdutosPage() {
     const preco = parseFloat(precoDraft.replace(",", ".")) || 0;
     const estoque = parseInt(estoqueDraft, 10) || 0;
     const [cor, volume] = key.split("|");
-    setVars((v) => ({ ...v, [key]: { ...v[key], cor, volume, preco, estoque, ativo: v[key]?.ativo ?? true } }));
+    // vazio = usa o desconto do produto
+    const descontoPct = descDraft.trim() === "" ? undefined : Math.min(100, Math.max(0, parseFloat(descDraft.replace(",", ".")) || 0));
+    setVars((v) => ({ ...v, [key]: { ...v[key], cor, volume, preco, estoque, ativo: v[key]?.ativo ?? true, descontoPct } }));
     setEditando(null);
   }
 
@@ -177,6 +180,7 @@ export default function ProdutosPage() {
   const precos = varValues.map((v) => v.preco);
   const precoMin = precos.length > 0 ? Math.min(...precos) : 0;
   const precoMax = precos.length > 0 ? Math.max(...precos) : 0;
+  const aVista = (v: ProdutoVariacao) => v.preco * (1 - (v.descontoPct ?? desconto) / 100);
 
   function abrirEditor(p: Produto, copiaDe?: string) {
     setCopiaDeNome(copiaDe ?? null);
@@ -305,7 +309,7 @@ export default function ProdutosPage() {
           variacoes: {
             ...variacoesRemovidas,
             // merge:true não apaga campo omitido; foto removida precisa de deleteField
-            ...Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, v.foto ? v : { ...v, foto: deleteField() }])),
+            ...Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, { ...v, ...(v.foto ? {} : { foto: deleteField() }), ...(v.descontoPct == null ? { descontoPct: deleteField() } : {}) }])),
           },
           specs,
           fotos,
@@ -881,11 +885,15 @@ export default function ProdutosPage() {
                           editando={editando}
                           precoDraft={precoDraft}
                           estoqueDraft={estoqueDraft}
+                          descDraft={descDraft}
+                          descPadrao={desconto}
+                          onSetDesc={setDescDraft}
                           limite={limite}
                           onCellClick={(key) => {
                             const v = vars[key];
                             setPrecoDraft(v ? v.preco.toFixed(2).replace(".", ",") : "");
                             setEstoqueDraft(v ? String(v.estoque) : "");
+                            setDescDraft(v?.descontoPct != null ? String(v.descontoPct) : "");
                             setEditando(key);
                           }}
                           onSalvarCelula={salvarCelula}
@@ -994,11 +1002,15 @@ export default function ProdutosPage() {
                             editando={editando}
                             precoDraft={precoDraft}
                             estoqueDraft={estoqueDraft}
+                            descDraft={descDraft}
+                            descPadrao={desconto}
+                            onSetDesc={setDescDraft}
                             limite={limite}
                             onCellClick={(key) => {
                               const v = vars[key];
                               setPrecoDraft(v ? v.preco.toFixed(2).replace(".", ",") : "");
                               setEstoqueDraft(v ? String(v.estoque) : "");
+                              setDescDraft(v?.descontoPct != null ? String(v.descontoPct) : "");
                               setEditando(key);
                             }}
                             onSalvarCelula={salvarCelula}
@@ -1162,11 +1174,11 @@ export default function ProdutosPage() {
                       <span className="text-sm text-ink-soft">%</span>
                     </div>
                   </div>
-                  {desconto > 0 && (
+                  {(desconto > 0 || varValues.some((v) => v.descontoPct)) && varValues.length > 0 && (
                     <div className="mt-3 flex flex-col gap-1 text-[15px]">
                       <div className="flex items-center gap-2">
                         <span className="w-24 shrink-0 text-xs text-ink-soft">À vista</span>
-                        <span className="font-mono">{formatBRL(precoMin * (1 - desconto / 100))} – {formatBRL(precoMax * (1 - desconto / 100))}</span>
+                        <span className="font-mono">{formatBRL(Math.min(...varValues.map(aVista)))} – {formatBRL(Math.max(...varValues.map(aVista)))}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="w-24 shrink-0 text-xs text-ink-soft">A prazo</span>
@@ -1174,7 +1186,7 @@ export default function ProdutosPage() {
                       </div>
                     </div>
                   )}
-                  <p className="mt-3 text-xs text-ink-soft">O desconto à vista vale para todas as variações do produto.</p>
+                  <p className="mt-3 text-xs text-ink-soft">Vale para todas as variações, exceto as que têm desconto próprio (clique na célula da variação para definir).</p>
                 </section>
               </div>
             </div>
@@ -1252,6 +1264,9 @@ function ProdutoVariacaoRow({
   editando,
   precoDraft,
   estoqueDraft,
+  descDraft,
+  descPadrao,
+  onSetDesc,
   limite,
   onCellClick,
   onSalvarCelula,
@@ -1267,6 +1282,9 @@ function ProdutoVariacaoRow({
   editando: string | null;
   precoDraft: string;
   estoqueDraft: string;
+  descDraft: string;
+  descPadrao: number;
+  onSetDesc: (v: string) => void;
   limite: number;
   onCellClick: (key: string) => void;
   onSalvarCelula: (key: string) => void;
@@ -1334,6 +1352,19 @@ function ProdutoVariacaoRow({
                     className="h-7.5 w-15.5 rounded-md border border-border px-2 text-center font-mono text-[13px]"
                   />
                 </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    defaultValue={descDraft}
+                    onChange={(e) => onSetDesc(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") onSalvarCelula(key);
+                    }}
+                    placeholder={String(descPadrao)}
+                    title="Desconto à vista desta variação. Vazio = desconto do produto"
+                    className="h-7.5 w-15.5 rounded-md border border-border px-2 text-center font-mono text-[13px]"
+                  />
+                  <span className="text-[11px] text-ink-soft">% à vista</span>
+                </div>
                 {v && (
                   <button
                     type="button"
@@ -1365,6 +1396,7 @@ function ProdutoVariacaoRow({
               <>
                 <span className="net-pencil absolute right-2 top-2 text-[11px] text-ink-soft opacity-0 transition-opacity">✎</span>
                 <span className="font-mono text-[15px]">{formatBRL(v.preco)}</span>
+                {v.descontoPct != null && <span className="text-[11px] font-medium text-primary">{v.descontoPct}% à vista</span>}
                 <span className="flex items-center gap-1 font-mono text-[13px]" style={{ color: cellColor(v.estoque) }}>
                   {v.estoque} un
                   {v.estoque < limite && <span className="h-1.75 w-1.75 rounded-full" style={{ background: cellColor(v.estoque) }} />}

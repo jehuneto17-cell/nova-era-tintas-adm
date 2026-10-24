@@ -81,6 +81,8 @@ export interface ProdutoVariacao extends ProdutoVariacaoChave {
   estoque: number;
   ativo: boolean;
   foto?: string;
+  /** Desconto à vista só desta variação; ausente = usa o descontoPct do produto. */
+  descontoPct?: number;
 }
 
 export interface ProdutoCor {
