@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal, ModalTitle, ModalBody } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { fadeIn } from "@/lib/animations";
-import { formatBRL, cn } from "@/lib/utils";
+import { formatBRL, cn, isValidHexColor } from "@/lib/utils";
 import { useCloudinaryUpload } from "@/lib/hooks/useCloudinaryUpload";
 import { useProdutos } from "@/lib/hooks/useProdutos";
 import { useCategorias } from "@/lib/hooks/useCategorias";
@@ -32,8 +32,15 @@ type ExclusaoAlvo =
   | { tipo: "produto" }
   | { tipo: "cor"; nome: string }
   | { tipo: "volume"; nome: string }
-  | { tipo: "paleta"; paleta: "suvinil" | "coral" }
   | { tipo: "trocarTipo"; novoTipo: "tinta" | "item" };
+
+type Paleta = "suvinil" | "coral";
+type CorDaPaleta = CorTinta & { paleta: Paleta };
+
+const COLECAO_PALETA: Record<Paleta, string> = { suvinil: "cores", coral: "cores_coral" };
+const NOME_PALETA: Record<Paleta, string> = { suvinil: "Suvinil", coral: "Coral" };
+// Suvinil exige família: a loja só lista cores da coleção `cores` que tenham esse campo.
+const FAMILIAS_SUVINIL = ["Vermelhos", "Laranjas", "Amarelos", "Verdes", "Cianos", "Azuis", "Violetas", "Rosas/Magentas", "Neutros"];
 
 const TODAS_CORES_KEY = "__todas__";
 const SEM_COR_KEY = "__item__";
@@ -365,17 +372,8 @@ export default function ProdutosPage() {
     });
   }
 
-  function trocarPaletaEspecifica(paleta: "suvinil" | "coral") {
-    if (paleta === paletaTodasCores) return;
-    if (cores.length === 0) {
-      setPaletaTodasCores(paleta);
-      return;
-    }
-    setConfirmarExcluir({
-      titulo: `Trocar para paleta ${paleta === "coral" ? "Coral" : "Suvinil"}?`,
-      corpo: `${cores.length} cor(es) escolhida(s) da paleta atual somem junto com as variações. Isso não volta atrás.`,
-      alvo: { tipo: "paleta", paleta },
-    });
+  function adicionarCor(cor: ProdutoCor) {
+    setCores((c) => (c.some((x) => x.nome === cor.nome) ? c : [...c, cor]));
   }
 
   function removerVolume(nome: string) {
@@ -759,28 +757,6 @@ export default function ProdutosPage() {
                     <div>
                       <div className="mb-2 flex items-center gap-3">
                         <span className="text-xs font-medium uppercase tracking-wider text-ink-soft">Cores</span>
-                        <div className="flex overflow-hidden rounded-full border border-border text-[12px]">
-                          <button
-                            type="button"
-                            onClick={() => trocarPaletaEspecifica("suvinil")}
-                            className={cn(
-                              "cursor-pointer border-0 px-2.5 py-1 font-medium transition-colors",
-                              paletaTodasCores === "suvinil" ? "bg-primary text-white" : "bg-transparent text-ink-soft"
-                            )}
-                          >
-                            Suvinil
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => trocarPaletaEspecifica("coral")}
-                            className={cn(
-                              "cursor-pointer border-0 px-2.5 py-1 font-medium transition-colors",
-                              paletaTodasCores === "coral" ? "bg-primary text-white" : "bg-transparent text-ink-soft"
-                            )}
-                          >
-                            Coral
-                          </button>
-                        </div>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {cores.map((c) => (
@@ -806,18 +782,13 @@ export default function ProdutosPage() {
                           </span>
                         ))}
                         <SeletorCorPaleta
-                          paleta={paletaTodasCores === "coral" ? paletaCoresCoral : paletaCores}
-                          linkCadastro={paletaTodasCores === "coral" ? "/produtos/cores-coral" : "/produtos/cores"}
+                          suvinil={paletaCores}
+                          coral={paletaCoresCoral}
                           jaEscolhidas={cores}
                           open={seletorCorAberto}
                           onOpenChange={setSeletorCorAberto}
-                          onEscolher={(cor) => {
-                            setCores((c) =>
-                              c.some((x) => x.nome === cor.nome)
-                                ? c
-                                : [...c, { corId: cor.id, codigo: cor.codigo, nome: cor.nome, hex: cor.hex }]
-                            );
-                          }}
+                          onEscolher={(cor) => adicionarCor({ corId: cor.id, codigo: cor.codigo, nome: cor.nome, hex: cor.hex })}
+                          onErro={showToast}
                         />
                       </div>
                     </div>
@@ -1220,13 +1191,6 @@ export default function ProdutosPage() {
                 setConfirmarExcluir(null);
                 return;
               }
-              if (alvo.tipo === "paleta") {
-                setCores([]);
-                setVars({});
-                setPaletaTodasCores(alvo.paleta);
-                setConfirmarExcluir(null);
-                return;
-              }
               if (alvo.tipo === "trocarTipo") {
                 setCores([]);
                 setTodasCores(false);
@@ -1249,7 +1213,7 @@ export default function ProdutosPage() {
               }
             }}
           >
-            {confirmarExcluir?.alvo.tipo === "paleta" || confirmarExcluir?.alvo.tipo === "trocarTipo" ? "Trocar" : "Excluir"}
+            {confirmarExcluir?.alvo.tipo === "trocarTipo" ? "Trocar" : "Excluir"}
           </Button>
         </div>
       </Modal>
@@ -1411,45 +1375,117 @@ function ProdutoVariacaoRow({
 }
 
 function SeletorCorPaleta({
-  paleta,
+  suvinil,
+  coral,
   jaEscolhidas,
   open,
   onOpenChange,
   onEscolher,
-  linkCadastro = "/produtos/cores",
+  onErro,
 }: {
-  paleta: CorTinta[];
+  suvinil: CorTinta[];
+  coral: CorTinta[];
   jaEscolhidas: ProdutoCor[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onEscolher: (cor: CorTinta) => void;
-  linkCadastro?: string;
+  onErro: (mensagem: string) => void;
 }) {
   const [busca, setBusca] = useState("");
+  const [filtro, setFiltro] = useState<"todas" | Paleta>("todas");
+  const [criando, setCriando] = useState(false);
+  const [novoNome, setNovoNome] = useState("");
+  const [novoHex, setNovoHex] = useState("#");
+  const [novoCodigo, setNovoCodigo] = useState("");
+  const [novaPaleta, setNovaPaleta] = useState<Paleta>("suvinil");
+  const [novaFamilia, setNovaFamilia] = useState(FAMILIAS_SUVINIL[0]);
+  const [salvandoNova, setSalvandoNova] = useState(false);
   const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number } | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
   const buscaNorm = busca.trim().toLowerCase();
-  const resultados = useMemo(() => {
-    const escolhidasNomes = new Set(jaEscolhidas.map((c) => c.nome));
-    const disponiveis = paleta.filter((c) => c.ativa && !escolhidasNomes.has(c.nome));
-    if (!buscaNorm) return disponiveis.slice(0, 60);
-    return disponiveis
-      .filter((c) => c.nome.toLowerCase().includes(buscaNorm) || c.codigo.toLowerCase().includes(buscaNorm))
-      .slice(0, 60);
-  }, [paleta, jaEscolhidas, buscaNorm]);
+  const escolhidasNomes = useMemo(() => new Set(jaEscolhidas.map((c) => c.nome.toLowerCase())), [jaEscolhidas]);
+
+  const disponiveis = useMemo<CorDaPaleta[]>(
+    () => [
+      ...(filtro !== "suvinil" ? coral.map((c) => ({ ...c, paleta: "coral" as const })) : []),
+      ...(filtro !== "coral" ? suvinil.map((c) => ({ ...c, paleta: "suvinil" as const })) : []),
+    ].filter((c) => c.ativa && !escolhidasNomes.has(c.nome.toLowerCase())),
+    [suvinil, coral, filtro, escolhidasNomes]
+  );
+  const filtradas = useMemo(
+    () =>
+      buscaNorm
+        ? disponiveis.filter((c) => c.nome.toLowerCase().includes(buscaNorm) || c.codigo.toLowerCase().includes(buscaNorm))
+        : disponiveis,
+    [disponiveis, buscaNorm]
+  );
+  const resultados = filtradas.slice(0, 60);
+
+  const hexNovo = novoHex.startsWith("#") ? novoHex : `#${novoHex}`;
+  const hexNovoValido = isValidHexColor(hexNovo);
+  const nomeNovo = novoNome.trim();
+  const paletaDaNova = novaPaleta === "coral" ? coral : suvinil;
+  const erroNova = !nomeNovo
+    ? null
+    : escolhidasNomes.has(nomeNovo.toLowerCase())
+      ? "Já existe uma cor com esse nome neste produto."
+      : paletaDaNova.some((c) => c.nome.toLowerCase() === nomeNovo.toLowerCase())
+        ? `Já existe uma cor com esse nome na paleta ${NOME_PALETA[novaPaleta]}. Escolha ela na lista.`
+        : novoCodigo.trim() && paletaDaNova.some((c) => c.codigo.toLowerCase() === novoCodigo.trim().toLowerCase())
+          ? `Esse código já existe na paleta ${NOME_PALETA[novaPaleta]}.`
+          : null;
+  const podeCriar = !!nomeNovo && hexNovoValido && !erroNova;
 
   function abrir() {
     const rect = triggerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const espacoAbaixo = window.innerHeight - rect.bottom;
-    const paraCima = espacoAbaixo < 380;
+    const paraCima = espacoAbaixo < 460;
     setPos({
       left: rect.left,
       ...(paraCima ? { bottom: window.innerHeight - rect.top + 6 } : { top: rect.bottom + 6 }),
     });
     setBusca("");
+    setFiltro("todas");
+    setCriando(false);
     onOpenChange(true);
+  }
+
+  function comecarCriar() {
+    setNovoNome(busca.trim());
+    setNovoHex("#");
+    setNovoCodigo("");
+    setNovaPaleta(filtro === "coral" ? "coral" : "suvinil");
+    setNovaFamilia(FAMILIAS_SUVINIL[0]);
+    setCriando(true);
+  }
+
+  function proximoCodigo() {
+    const usados = paletaDaNova.map((c) => /^NOVA (\d+)$/.exec(c.codigo)?.[1]).filter(Boolean).map(Number);
+    return `NOVA ${(usados.length ? Math.max(...usados) : 0) + 1}`;
+  }
+
+  async function criarCor() {
+    if (!podeCriar) return;
+    setSalvandoNova(true);
+    try {
+      const dados = {
+        codigo: novoCodigo.trim() || proximoCodigo(),
+        nome: nomeNovo,
+        hex: hexNovo.toUpperCase(),
+        ativa: true,
+        ...(novaPaleta === "suvinil" ? { familia: novaFamilia } : {}),
+      };
+      const ref = await addDoc(collection(db, COLECAO_PALETA[novaPaleta]), dados);
+      onEscolher({ id: ref.id, familia: "", ...dados });
+      onOpenChange(false);
+    } catch (err) {
+      console.error("Erro ao criar cor", err);
+      onErro("Não deu para criar a cor. Tente de novo.");
+    } finally {
+      setSalvandoNova(false);
+    }
   }
 
   return (
@@ -1476,44 +1512,160 @@ function SeletorCorPaleta({
               style={{ left: pos.left, top: pos.top, bottom: pos.bottom }}
               className="fixed z-50 w-80 overflow-hidden rounded-[10px] border border-border bg-white shadow-[0_12px_28px_rgba(16,24,40,0.16)]"
             >
-              <div className="border-b border-border p-2.5">
-                <Input
-                  autoFocus
-                  value={busca}
-                  onChange={(e) => setBusca(e.target.value)}
-                  placeholder="Buscar cor (nome ou código)"
-                  className="h-8.5 text-sm"
-                />
-              </div>
-              <div className="max-h-72 overflow-y-auto p-1.5">
-                {resultados.length === 0 ? (
-                  <p className="p-3 text-center text-[13px] text-ink-soft">
-                    Nenhuma cor encontrada.{" "}
-                    <Link href={linkCadastro} className="font-medium no-underline">
-                      Cadastrar na paleta
-                    </Link>
-                  </p>
-                ) : (
-                  resultados.map((cor) => (
-                    <button
-                      key={cor.id}
-                      type="button"
-                      onClick={() => {
-                        onEscolher(cor);
-                        onOpenChange(false);
-                      }}
-                      className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-0 bg-transparent px-2.5 py-2 text-left font-sans"
-                    >
-                      <span
-                        className="h-5 w-5 shrink-0 rounded-[5px] border border-black/10"
-                        style={{ background: cor.hex }}
+              {criando ? (
+                <div className="flex flex-col gap-3 p-3">
+                  <div className="text-sm font-semibold">Criar cor nova</div>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="nc-nome" className="text-[12px] font-medium">Nome</label>
+                    <Input id="nc-nome" autoFocus value={novoNome} onChange={(e) => setNovoNome(e.target.value)} className="h-8.5 text-sm" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="nc-hex" className="text-[12px] font-medium">Cor</label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={hexNovoValido ? hexNovo.toLowerCase() : "#ffffff"}
+                        onChange={(e) => setNovoHex(e.target.value)}
+                        aria-label="Escolher cor"
+                        className="h-8.5 w-10 shrink-0 cursor-pointer rounded-md border border-border bg-white p-0.5"
                       />
-                      <span className="min-w-0 flex-1 truncate text-[13px]">{cor.nome}</span>
-                      <span className="shrink-0 font-mono text-[11px] text-ink-soft">{cor.codigo}</span>
+                      <Input
+                        id="nc-hex"
+                        value={novoHex}
+                        onChange={(e) => setNovoHex(e.target.value)}
+                        error={novoHex.length > 1 && !hexNovoValido}
+                        placeholder="#E8D5D4"
+                        className="h-8.5 flex-1 font-mono text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[12px] font-medium">Guardar na paleta</span>
+                    <div className="flex w-fit overflow-hidden rounded-full border border-border text-[12px]">
+                      {(["suvinil", "coral"] as const).map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setNovaPaleta(p)}
+                          className={cn(
+                            "cursor-pointer border-0 px-3 py-1 font-medium transition-colors",
+                            novaPaleta === p ? "bg-primary text-white" : "bg-transparent text-ink-soft"
+                          )}
+                        >
+                          {NOME_PALETA[p]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {novaPaleta === "suvinil" && (
+                    <div className="flex flex-col gap-1.5">
+                      <label htmlFor="nc-familia" className="text-[12px] font-medium">Família</label>
+                      <select
+                        id="nc-familia"
+                        value={novaFamilia}
+                        onChange={(e) => setNovaFamilia(e.target.value)}
+                        className="h-8.5 rounded-lg border border-border bg-white px-2 text-sm"
+                      >
+                        {FAMILIAS_SUVINIL.map((f) => (
+                          <option key={f} value={f}>
+                            {f}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="nc-codigo" className="text-[12px] font-medium">Código (opcional)</label>
+                    <Input
+                      id="nc-codigo"
+                      value={novoCodigo}
+                      onChange={(e) => setNovoCodigo(e.target.value)}
+                      placeholder="Se vazio, o painel gera (NOVA 1, NOVA 2…)"
+                      className="h-8.5 text-sm"
+                    />
+                  </div>
+                  {erroNova && <p className="m-0 text-[12px] text-red-600">{erroNova}</p>}
+                  <p className="m-0 text-[11px] text-ink-soft text-pretty">
+                    A cor fica guardada na paleta {NOME_PALETA[novaPaleta]} e também aparece nos produtos com todas as cores dessa paleta.
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <Button type="button" variant="secondary" onClick={() => setCriando(false)}>
+                      Voltar
+                    </Button>
+                    <Button type="button" loading={salvandoNova} disabled={!podeCriar} onClick={criarCor}>
+                      Criar e adicionar
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div className="border-b border-border p-2.5">
+                    <Input
+                      autoFocus
+                      value={busca}
+                      onChange={(e) => setBusca(e.target.value)}
+                      placeholder="Buscar cor (nome ou código)"
+                      className="h-8.5 text-sm"
+                    />
+                    <div className="mt-2 flex w-fit overflow-hidden rounded-full border border-border text-[12px]">
+                      {(["todas", "suvinil", "coral"] as const).map((f) => (
+                        <button
+                          key={f}
+                          type="button"
+                          onClick={() => setFiltro(f)}
+                          className={cn(
+                            "cursor-pointer border-0 px-2.5 py-1 font-medium transition-colors",
+                            filtro === f ? "bg-primary text-white" : "bg-transparent text-ink-soft"
+                          )}
+                        >
+                          {f === "todas" ? "Todas" : NOME_PALETA[f]}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto p-1.5">
+                    {resultados.length === 0 ? (
+                      <p className="p-3 text-center text-[13px] text-ink-soft">Nenhuma cor encontrada.</p>
+                    ) : (
+                      resultados.map((cor) => (
+                        <button
+                          key={`${cor.paleta}-${cor.id}`}
+                          type="button"
+                          onClick={() => {
+                            onEscolher(cor);
+                            onOpenChange(false);
+                          }}
+                          className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg border-0 bg-transparent px-2.5 py-2 text-left font-sans"
+                        >
+                          <span
+                            className="h-5 w-5 shrink-0 rounded-[5px] border border-black/10"
+                            style={{ background: cor.hex }}
+                          />
+                          <span className="min-w-0 flex-1 truncate text-[13px]">{cor.nome}</span>
+                          <span className="shrink-0 rounded-full border border-border bg-paper px-1.5 py-px text-[10px] font-medium text-ink-soft">
+                            {NOME_PALETA[cor.paleta]}
+                          </span>
+                          <span className="shrink-0 font-mono text-[11px] text-ink-soft">{cor.codigo}</span>
+                        </button>
+                      ))
+                    )}
+                    {filtradas.length > resultados.length && (
+                      <p className="p-2 text-center text-[11px] text-ink-soft">
+                        Mostrando {resultados.length} de {filtradas.length} — busque pelo nome ou código.
+                      </p>
+                    )}
+                  </div>
+                  <div className="border-t border-border p-1.5">
+                    <button
+                      type="button"
+                      onClick={comecarCriar}
+                      className="w-full cursor-pointer rounded-lg border-0 bg-transparent px-2.5 py-2 text-left font-sans text-[13px] font-medium text-primary"
+                    >
+                      + Criar cor nova{busca.trim() ? ` “${busca.trim()}”` : ""}
                     </button>
-                  ))
-                )}
-              </div>
+                  </div>
+                </>
+              )}
             </motion.div>
           </AnimatePresence>,
           document.body
