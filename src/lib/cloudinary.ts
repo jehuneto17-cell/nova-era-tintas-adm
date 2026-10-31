@@ -67,3 +67,16 @@ export async function uploadToCloudinary(file: File, folder?: string): Promise<C
   const data = await response.json();
   return { url: data.secure_url as string, publicId: data.public_id as string, width: data.width as number, height: data.height as number };
 }
+
+/**
+ * Pede ao Cloudinary uma cópia menor (WebP/AVIF automático) em vez do original.
+ * O original e a URL gravada no banco não mudam. URL que não for do Cloudinary passa direto.
+ * `largura` em px físicos (≈ 2× o tamanho na tela).
+ */
+export function otimizar(url: string | undefined | null, largura = 400) {
+  if (!url) return url ?? undefined;
+  return url.replace(
+    /^(https:\/\/res\.cloudinary\.com\/[^/]+\/image\/upload\/)(?=v\d+\/)/,
+    `$1w_${largura},c_limit,f_auto,q_auto/`
+  );
+}

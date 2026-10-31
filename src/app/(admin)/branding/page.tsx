@@ -11,7 +11,7 @@ import { Modal, ModalTitle, ModalBody } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
 import { isValidHexColor, cn } from "@/lib/utils";
 import { useCloudinaryUpload } from "@/lib/hooks/useCloudinaryUpload";
-import { ACCEPTED_IMAGE_TYPES } from "@/lib/cloudinary";
+import { ACCEPTED_IMAGE_TYPES, otimizar } from "@/lib/cloudinary";
 
 const PALETA = [
   "#0E7A2F", "#12B76A", "#00B20B", "#7CC243", "#C9D600", "#F2C200",
@@ -217,7 +217,7 @@ export default function BrandingPage() {
                     style={{ width: larga ? 116 : 84, height: larga ? 40 : 84 }}
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={logoUrl!} alt="Logo da loja" className="h-full w-full object-contain" />
+                    <img src={otimizar(logoUrl!, 200)} alt="Logo da loja" className="h-full w-full object-contain" />
                   </motion.div>
                 ) : (
                   <div className="flex h-full w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border p-2">
@@ -729,7 +729,7 @@ function BannerUploader({
       >
         {url ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          <img src={otimizar(url, 800)} alt="" className="absolute inset-0 h-full w-full object-cover" />
         ) : (
           <>
             <div className="absolute inset-0" style={{ background: "repeating-linear-gradient(45deg, #D0D5DD 0 8px, #E4E7EC 8px 16px)" }} />

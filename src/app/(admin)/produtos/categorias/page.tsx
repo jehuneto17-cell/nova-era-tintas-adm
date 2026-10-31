@@ -44,7 +44,7 @@ import { staggerContainer, staggerItem, cardHover } from "@/lib/animations";
 import { useCategorias } from "@/lib/hooks/useCategorias";
 import { useProdutos } from "@/lib/hooks/useProdutos";
 import { useCloudinaryUpload } from "@/lib/hooks/useCloudinaryUpload";
-import { ACCEPTED_IMAGE_TYPES } from "@/lib/cloudinary";
+import { ACCEPTED_IMAGE_TYPES, otimizar } from "@/lib/cloudinary";
 import type { Categoria } from "@/lib/types";
 
 const ICONES: Record<string, LucideIcon> = {
@@ -287,7 +287,7 @@ export default function CategoriasPage() {
                     >
                       {c.fotoUrl && (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={c.fotoUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                        <img src={otimizar(c.fotoUrl, 300)} alt="" className="absolute inset-0 h-full w-full object-cover" />
                       )}
                       <div className="absolute inset-0" style={{ background: "linear-gradient(180deg, rgba(16,24,40,0) 40%, rgba(16,24,40,0.5))" }} />
                       <div className="relative flex items-center gap-1.5 text-white">

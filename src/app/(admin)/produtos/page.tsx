@@ -20,7 +20,7 @@ import { useProdutos } from "@/lib/hooks/useProdutos";
 import { useCategorias } from "@/lib/hooks/useCategorias";
 import { useCores, useCoresCoral } from "@/lib/hooks/useCores";
 import { useUnidadesVolume, salvarUnidadesVolume } from "@/lib/hooks/useUnidadesVolume";
-import { ACCEPTED_IMAGE_TYPES, MAX_FILE_SIZE_BYTES } from "@/lib/cloudinary";
+import { ACCEPTED_IMAGE_TYPES, MAX_FILE_SIZE_BYTES, otimizar } from "@/lib/cloudinary";
 import type { CorTinta, Produto, ProdutoCor, ProdutoVariacao } from "@/lib/types";
 
 interface Foto {
@@ -488,7 +488,7 @@ export default function ProdutosPage() {
                       <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-md border border-border bg-paper">
                         {p.fotos[0] ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={p.fotos[0].url} alt="" className="h-full w-full object-cover" />
+                          <img src={otimizar(p.fotos[0].url, 200)} alt="" className="h-full w-full object-cover" />
                         ) : (
                           <span className="h-3.5 w-3.5 rounded-[3px]" style={{ background: swatch }} />
                         )}
@@ -882,7 +882,7 @@ export default function ProdutosPage() {
                               {v?.foto ? (
                                 <>
                                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={v.foto} alt="" className="h-16 w-16 rounded-md object-cover" />
+                                  <img src={otimizar(v.foto, 200)} alt="" className="h-16 w-16 rounded-md object-cover" />
                                   <button type="button" onClick={() => removerFotoVariacao(key)} className="cursor-pointer border-0 bg-transparent p-0 text-[11px] font-medium text-[#B54708]">
                                     Remover foto
                                   </button>
@@ -1087,7 +1087,7 @@ export default function ProdutosPage() {
                         style={{ opacity: dragFoto === f.id ? 0.4 : 1 }}
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={f.url} alt="" className="h-full w-full object-cover" draggable={false} />
+                        <img src={otimizar(f.url, 300)} alt="" className="h-full w-full object-cover" draggable={false} />
                         <span className="absolute left-1.5 top-1.5 rounded-full bg-[rgba(16,24,40,0.55)] px-1.5 py-0.5 text-[10px] font-medium text-white">
                           {i === 0 ? "Capa" : i + 1}
                         </span>
