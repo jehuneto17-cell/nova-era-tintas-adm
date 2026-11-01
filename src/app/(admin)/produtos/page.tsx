@@ -60,7 +60,7 @@ export default function ProdutosPage() {
   const [busca, setBusca] = useState("");
   const [categoria, setCategoria] = useState("");
   const [soBaixo, setSoBaixo] = useState(false);
-  const [criandoProduto, setCriandoProduto] = useState(false);
+  const produtoNovoRef = useRef(false);
   const [copiaDeNome, setCopiaDeNome] = useState<string | null>(null);
   const [confirmarExcluir, setConfirmarExcluir] = useState<{ titulo: string; corpo: string; alvo: ExclusaoAlvo } | null>(null);
   const [excluindo, setExcluindo] = useState(false);
@@ -189,7 +189,8 @@ export default function ProdutosPage() {
   const precoMax = precos.length > 0 ? Math.max(...precos) : 0;
   const aVista = (v: ProdutoVariacao) => v.preco * (1 - (v.descontoPct ?? desconto) / 100);
 
-  function abrirEditor(p: Produto, copiaDe?: string) {
+  function abrirEditor(p: Produto, copiaDe?: string, novo = false) {
+    produtoNovoRef.current = novo;
     setCopiaDeNome(copiaDe ?? null);
     setProdutoId(p.id);
     setProdutoNome(p.nome);
@@ -211,12 +212,13 @@ export default function ProdutosPage() {
     setView("editor");
   }
 
-  async function novoProduto() {
-    setCriandoProduto(true);
-    try {
-      const primeiraCategoria = categorias[0];
-      const ref = await addDoc(collection(db, "produtos"), {
-        nome: "Novo produto",
+  // Não grava nada no banco: o produto só passa a existir quando clicar em Salvar.
+  function novoProduto() {
+    const primeiraCategoria = categorias[0];
+    abrirEditor(
+      {
+        id: doc(collection(db, "produtos")).id,
+        nome: "",
         categoriaId: primeiraCategoria?.id ?? "",
         categoria: primeiraCategoria?.nome ?? "",
         descricao: "",
@@ -228,70 +230,36 @@ export default function ProdutosPage() {
         variacoes: {},
         specs: [],
         fotos: [],
-        criado_em: serverTimestamp(),
-      });
-      abrirEditor({
-        id: ref.id,
-        nome: "Novo produto",
-        categoriaId: primeiraCategoria?.id ?? "",
-        categoria: primeiraCategoria?.nome ?? "",
-        descricao: "",
-        limiteEstoqueBaixo: 10,
-        descontoPct: 0,
-        ativo: false,
-        cores: [],
-        volumes: [],
-        variacoes: {},
-        specs: [],
-        fotos: [],
-      });
-      showToast("Produto criado — preencha e salve");
-    } catch (err) {
-      console.error("Erro ao criar produto", err);
-      showToast("Não deu para criar o produto. Tente de novo.");
-    } finally {
-      setCriandoProduto(false);
-    }
+      },
+      undefined,
+      true
+    );
   }
 
-  async function duplicarProduto(original: Produto) {
-    setCriandoProduto(true);
-    try {
-      const variacoesZeradas = Object.fromEntries(
-        Object.entries(original.variacoes).map(([key, v]) => [key, { ...v, estoque: 0 }])
-      );
-      const dados = {
+  function duplicarProduto(original: Produto) {
+    const variacoesZeradas = Object.fromEntries(
+      Object.entries(original.variacoes).map(([key, v]) => [key, { ...v, estoque: 0 }])
+    );
+    abrirEditor(
+      {
+        ...original,
+        id: doc(collection(db, "produtos")).id,
         nome: `${original.nome} (cópia)`,
-        categoriaId: original.categoriaId,
-        categoria: original.categoria,
-        descricao: original.descricao,
-        limiteEstoqueBaixo: original.limiteEstoqueBaixo,
-        descontoPct: original.descontoPct,
         ativo: false,
         tipo: original.tipo ?? "tinta",
-        cores: original.cores,
-        todasCores: original.todasCores ?? false,
-        ...(original.todasCores ? { paletaTodasCores: original.paletaTodasCores ?? "suvinil" } : {}),
-        ambientes: original.ambientes ?? [],
-        volumes: original.volumes,
         variacoes: variacoesZeradas,
-        specs: original.specs,
-        fotos: original.fotos,
-        criado_em: serverTimestamp(),
-      };
-      const ref = await addDoc(collection(db, "produtos"), dados);
-      abrirEditor({ ...dados, id: ref.id }, original.nome);
-      showToast("Cópia criada — ajuste o nome e salve");
-    } catch (err) {
-      console.error("Erro ao duplicar produto", err);
-      showToast("Não deu para duplicar o produto. Tente de novo.");
-    } finally {
-      setCriandoProduto(false);
-    }
+      },
+      original.nome,
+      true
+    );
   }
 
   async function salvarProduto() {
     if (!produtoId) return;
+    if (!produtoNome.trim()) {
+      showToast("Dê um nome ao produto antes de salvar");
+      return;
+    }
     setSalvando(true);
     try {
       const variacoesRemovidas: Record<string, ReturnType<typeof deleteField>> = {};
@@ -322,10 +290,12 @@ export default function ProdutosPage() {
           fotos,
           ativo: produtoAtivo,
           atualizado_em: serverTimestamp(),
+          ...(produtoNovoRef.current ? { criado_em: serverTimestamp() } : {}),
         },
         { merge: true }
       );
       varsOriginaisRef.current = vars;
+      produtoNovoRef.current = false;
       showToast("Produto salvo");
       setView("lista");
     } catch (err) {
@@ -406,7 +376,7 @@ export default function ProdutosPage() {
                   </button>
                 </p>
               </div>
-              <Button className="shrink-0" loading={criandoProduto} onClick={novoProduto}>
+              <Button className="shrink-0" onClick={novoProduto}>
                 + Novo produto
               </Button>
             </div>
@@ -516,7 +486,6 @@ export default function ProdutosPage() {
                       <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
                         <button
                           type="button"
-                          disabled={criandoProduto}
                           onClick={() => duplicarProduto(p)}
                           aria-label={`Duplicar ${p.nome}`}
                           title="Duplicar"
@@ -555,10 +524,10 @@ export default function ProdutosPage() {
                   Produtos
                 </button>
                 <span className="mx-1.5">/</span>
-                {produtoNome}
+                {produtoNome || "Novo produto"}
               </div>
               <div className="mt-2 flex items-center justify-between gap-6">
-                <h1 className="m-0 text-[26px] font-semibold tracking-tight">{produtoNome}</h1>
+                <h1 className="m-0 text-[26px] font-semibold tracking-tight">{produtoNome || "Novo produto"}</h1>
                 <div className="flex items-center gap-3.5">
                   <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-soft">
                     <motion.input
@@ -602,7 +571,7 @@ export default function ProdutosPage() {
                   <div className="flex flex-col gap-4">
                     <div className="flex flex-col gap-1.5">
                       <label htmlFor="np-nome" className="text-[13px] font-medium">Nome do produto</label>
-                      <Input id="np-nome" value={produtoNome} onChange={(e) => setProdutoNome(e.target.value)} />
+                      <Input id="np-nome" placeholder="Nome do produto" value={produtoNome} onChange={(e) => setProdutoNome(e.target.value)} />
                     </div>
                     <div className="flex flex-col gap-1.5">
                       <label htmlFor="np-cat" className="text-[13px] font-medium">Categoria</label>
