@@ -1664,8 +1664,12 @@ function SeletorVolume({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Texto com letras (ex.: "18mm x 50m") vale como digitado, sem acrescentar a unidade.
+  const textoLivre = /[a-zA-ZÀ-ú]/.test(quantidade);
   const valorFormatado = quantidade.trim()
-    ? `${quantidade.includes("/") ? quantidade.trim() : quantidade.trim().replace(".", ",")}${unidade}`
+    ? textoLivre
+      ? quantidade.trim()
+      : `${quantidade.includes("/") ? quantidade.trim() : quantidade.trim().replace(".", ",")}${unidade}`
     : "";
   const duplicado = valorFormatado !== "" && jaExistentes.includes(valorFormatado);
 
@@ -1772,10 +1776,9 @@ function SeletorVolume({
                     <Input
                       ref={inputRef}
                       value={quantidade}
-                      onChange={(e) => setQuantidade(e.target.value.replace(/[^0-9.,\/]/g, ""))}
+                      onChange={(e) => setQuantidade(e.target.value.replace(/[|]/g, ""))}
                       onKeyDown={(e) => e.key === "Enter" && confirmar()}
-                      placeholder="Quantidade"
-                      inputMode="decimal"
+                      placeholder="500 ou 18mm x 50m"
                       className="h-8.5 min-w-0 flex-1 text-sm"
                     />
                     <select
